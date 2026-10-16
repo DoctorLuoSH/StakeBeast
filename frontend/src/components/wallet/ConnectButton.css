@@ -1,0 +1,25 @@
+/* ConnectButton styles */
+
+.connect-button {
+  white-space: nowrap;
+}
+
+.connect-button__cluster {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.connect-button__network {
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 0.15em 0.7em;
+  border-radius: var(--radius-pill);
+  background: var(--color-success-soft);
+  color: var(--color-primary-deep);
+}
+
+.connect-button__network--wrong {
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+}

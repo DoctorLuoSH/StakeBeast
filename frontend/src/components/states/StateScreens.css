@@ -1,0 +1,33 @@
+/**
+ * Shared styles for full-page state screens
+ * (NoMetaMask / WrongNetwork / TxErrorNotice / EmptyState).
+ */
+
+.state-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 0.75rem;
+  min-height: 50vh;
+  padding: 2rem 1.5rem;
+}
+
+.state-screen__icon {
+  font-size: 3rem;
+  line-height: 1;
+}
+
+.state-screen h2 {
+  margin: 0;
+}
+
+.state-screen p {
+  max-width: 46ch;
+  margin: 0;
+}
+
+.state-screen .button {
+  margin-top: 0.5rem;
+}

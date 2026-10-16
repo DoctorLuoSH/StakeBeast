@@ -1,0 +1,64 @@
+/* CreateSessionPage styles */
+
+.create {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.create__modes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.9rem;
+}
+
+.create__mode {
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  border: 2px solid transparent;
+  font: inherit;
+}
+
+.create__mode:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.create__mode--active {
+  border-color: var(--color-primary);
+}
+
+.create__form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-weight: 600;
+}
+
+.field input,
+.field select,
+.field textarea {
+  font: inherit;
+  font-weight: 400;
+  padding: 0.6em 0.8em;
+  border-radius: var(--radius-s);
+  border: 1.5px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-ink);
+}
+
+.field input:focus,
+.field select:focus,
+.field textarea:focus {
+  outline: 2px solid var(--color-primary-soft);
+  border-color: var(--color-primary);
+}
