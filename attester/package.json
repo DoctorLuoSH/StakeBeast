@@ -1,0 +1,19 @@
+{
+  "name": "stakebeast-attester",
+  "version": "0.1.0",
+  "private": true,
+  "description": "StakeBeast attestation service: heartbeat judgment (baseline v1.4 D2) and EIP-712 completion proof issuance.",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=16"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node --test dist/test/",
+    "start": "npm run build && node dist/src/index.js"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "typescript": "^5.4.0"
+  }
+}
