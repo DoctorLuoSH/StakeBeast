@@ -1,0 +1,33 @@
+/* ProfilePage styles */
+
+.profile {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.profile__stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1rem;
+}
+
+.profile__stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  align-items: flex-start;
+}
+
+.profile__stat-value {
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: var(--color-primary-deep);
+}
+
+.profile__zoo {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin: 0.75rem 0 0.5rem;
+}

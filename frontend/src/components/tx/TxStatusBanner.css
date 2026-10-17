@@ -1,0 +1,55 @@
+/* TxStatusBanner styles — one banner per lifecycle phase. */
+
+.tx-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  border-radius: var(--radius-m);
+  padding: 0.7rem 1rem;
+  font-size: 0.92rem;
+  border: 1px solid transparent;
+}
+
+.tx-banner--pending {
+  background: var(--color-accent-soft);
+  border-color: var(--color-accent);
+  color: var(--color-ink);
+}
+
+.tx-banner--success {
+  background: var(--color-success-soft);
+  border-color: var(--color-success);
+  color: var(--color-primary-deep);
+}
+
+.tx-banner--warning {
+  background: var(--color-warning-soft);
+  border-color: var(--color-warning);
+  color: var(--color-ink);
+}
+
+.tx-banner--error {
+  background: var(--color-danger-soft);
+  border-color: var(--color-danger);
+  color: var(--color-ink);
+}
+
+.tx-banner a {
+  font-weight: 600;
+}
+
+.tx-banner__spinner {
+  width: 1em;
+  height: 1em;
+  flex: none;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  animation: tx-banner-spin 0.8s linear infinite;
+}
+
+@keyframes tx-banner-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

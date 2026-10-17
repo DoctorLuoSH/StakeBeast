@@ -1,0 +1,216 @@
+/*
+ * StakeBeast design baseline — original "calm nature / healing" palette.
+ * All colors, spacing and radii are tokens; components must not hardcode values.
+ * Art assets (beast sprites, animations) are original work by teammate B;
+ * BeastSprite reserves the component interface for them.
+ */
+
+:root {
+  /* Palette — warm paper, moss greens, sunset amber */
+  --color-bg: #f7f5ef;
+  --color-surface: #ffffff;
+  --color-surface-alt: #eef3ec;
+  --color-ink: #22312a;
+  --color-ink-muted: #6f7d74;
+  --color-primary: #3d7f5f;
+  --color-primary-deep: #2b5f46;
+  --color-primary-soft: #dceadf;
+  --color-accent: #e39a4e;
+  --color-accent-soft: #f8e8d4;
+  --color-danger: #bf5a50;
+  --color-danger-soft: #f6e0dd;
+  --color-warning: #b9862f;
+  --color-warning-soft: #f7ecd6;
+  --color-success: #3d7f5f;
+  --color-success-soft: #dceade;
+  --color-border: #ddd8cb;
+  --color-skeleton: #e7e4da;
+
+  /* Typography */
+  --font-sans: "Avenir Next", "Segoe UI", "PingFang SC", "Hiragino Sans GB",
+    "Microsoft YaHei", system-ui, -apple-system, sans-serif;
+  --font-mono: "SFMono-Regular", ui-monospace, "Cascadia Mono", Menlo, monospace;
+
+  /* Shape & depth */
+  --radius-s: 8px;
+  --radius-m: 14px;
+  --radius-l: 22px;
+  --radius-pill: 999px;
+  --shadow-card: 0 2px 10px rgba(34, 49, 42, 0.07);
+  --shadow-pop: 0 8px 28px rgba(34, 49, 42, 0.14);
+
+  /* Layout */
+  --layout-max-width: 1080px;
+  --nav-height: 60px;
+
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+}
+
+body {
+  font-family: var(--font-sans);
+  background:
+    radial-gradient(1200px 500px at 85% -10%, var(--color-accent-soft), transparent 60%),
+    radial-gradient(900px 420px at -10% 0%, var(--color-surface-alt), transparent 55%),
+    var(--color-bg);
+  background-attachment: fixed;
+  color: var(--color-ink);
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3 {
+  line-height: 1.25;
+  margin: 0 0 0.5em;
+}
+
+p {
+  margin: 0 0 0.75em;
+}
+
+a {
+  color: var(--color-primary-deep);
+}
+
+code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  background: var(--color-surface-alt);
+  border-radius: var(--radius-s);
+  padding: 0.1em 0.4em;
+}
+
+/* ---------- Shared primitives ---------- */
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5em;
+  border: none;
+  border-radius: var(--radius-pill);
+  padding: 0.65em 1.4em;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  background: var(--color-primary);
+  color: #fff;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+
+.button:hover:not(:disabled) {
+  background: var(--color-primary-deep);
+}
+
+.button:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.button--ghost {
+  background: transparent;
+  color: var(--color-primary-deep);
+  border: 1.5px solid var(--color-primary);
+}
+
+.button--ghost:hover:not(:disabled) {
+  background: var(--color-success-soft);
+}
+
+.button--accent {
+  background: var(--color-accent);
+  color: var(--color-ink);
+}
+
+.button--accent:hover:not(:disabled) {
+  background: #d18c3f;
+}
+
+.button--danger {
+  background: var(--color-danger);
+}
+
+.card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-l);
+  box-shadow: var(--shadow-card);
+  padding: 1.25rem 1.5rem;
+}
+
+.badge {
+  display: inline-block;
+  border-radius: var(--radius-pill);
+  padding: 0.1em 0.7em;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.badge--p0 {
+  background: var(--color-success-soft);
+  color: var(--color-primary-deep);
+}
+
+.badge--p1 {
+  background: var(--color-accent-soft);
+  color: var(--color-warning);
+}
+
+.badge--p2 {
+  background: var(--color-surface-alt);
+  color: var(--color-ink-muted);
+}
+
+.muted {
+  color: var(--color-ink-muted);
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+/* Gentle breathing used by placeholders that will host beast animations */
+@keyframes beast-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.04);
+  }
+}
+
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: -200px 0;
+  }
+  100% {
+    background-position: 200px 0;
+  }
+}
+
+.skeleton {
+  border-radius: var(--radius-m);
+  background: linear-gradient(90deg, var(--color-skeleton) 25%, #f3f1e9 50%, var(--color-skeleton) 75%);
+  background-size: 400px 100%;
+  animation: skeleton-shimmer 1.4s infinite linear;
+}

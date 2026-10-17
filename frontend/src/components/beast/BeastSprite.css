@@ -1,0 +1,40 @@
+/* BeastSprite placeholder — swap internals for teammate B's original sprites. */
+
+.beast-sprite {
+  position: relative;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 50% 50% 46% 54% / 58% 60% 40% 42%;
+  background: var(--color-surface-alt);
+  border: 2px dashed var(--color-border);
+}
+
+.beast-sprite__glyph {
+  font-size: 42%;
+  z-index: 1;
+  animation: beast-breathe 3.2s ease-in-out infinite;
+}
+
+.beast-sprite__fill {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  background: var(--color-primary-soft);
+  transition: height 0.5s ease;
+}
+
+.beast-sprite--warning {
+  border-color: var(--color-warning);
+  background: var(--color-warning-soft);
+}
+
+.beast-sprite--fled {
+  opacity: 0.45;
+  filter: grayscale(0.8);
+}
+
+.beast-sprite--minted {
+  border-style: solid;
+  border-color: var(--color-accent);
+}

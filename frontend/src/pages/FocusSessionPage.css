@@ -1,0 +1,47 @@
+/* FocusSessionPage styles */
+
+.focus {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  max-width: 640px;
+  margin: 0 auto;
+}
+
+.focus__stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  padding-block: 2rem;
+}
+
+.focus__hint {
+  max-width: 42ch;
+  text-align: center;
+}
+
+.countdown {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+}
+
+.countdown__value {
+  font-size: clamp(2.2rem, 8vw, 3.2rem);
+  font-weight: 700;
+  color: var(--color-primary-deep);
+}
+
+.countdown__value--done {
+  color: var(--color-ink-muted);
+}
+
+.focus__slot h3 {
+  margin-bottom: 0.25rem;
+}
+
+.focus__slot p {
+  margin: 0;
+}
