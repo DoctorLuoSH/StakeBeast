@@ -9,13 +9,16 @@ import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 /// @title BeastNFT
 /// @notice Soulbound (non-transferable) ERC721 minted by the StakeBeast main
 ///         contract when a stake position completes successfully.
-/// @dev Implements the frozen requirements baseline v1.4 section 4.8 / D8:
-///      dual-track tiers (focus by declared minutes, habit by cycle days) and
-///      at most one beast per stake position per session.
+/// @dev Implements the frozen requirements baseline v1.4 section 4.8 / D8 and
+///      the frozen contract design (contract-design v1.2): dual-track tiers
+///      (focus by declared minutes, habit by cycle days), at most one beast per
+///      stake position per session, fully on-chain metadata (F8), and minting
+///      via OZ `_mint` (never `_safeMint`) so no receiver hook can block a
+///      settlement (contract-design section 6, R9).
 contract BeastNFT is ERC721, Ownable {
     using Strings for uint256;
 
-    enum BeastType {
+    enum Kind {
         Focus,
         Habit
     }
@@ -28,10 +31,10 @@ contract BeastNFT is ERC721, Ownable {
     }
 
     struct BeastMeta {
-        BeastType beastType;
+        Kind kind;
+        uint256 metricValue; // declared minutes (focus) or cycle days (habit)
         Tier tier;
-        uint256 measuredValue; // declared minutes (focus) or cycle days (habit)
-        uint256 completedAt; // completion date (unix timestamp)
+        uint64 completionDate; // completion date (unix timestamp)
         uint256 sessionId;
     }
 
@@ -51,8 +54,8 @@ contract BeastNFT is ERC721, Ownable {
         uint256 indexed tokenId,
         address indexed to,
         uint256 indexed sessionId,
-        BeastType beastType,
-        uint256 measuredValue,
+        Kind kind,
+        uint256 metricValue,
         Tier tier
     );
     event MinterUpdated(address indexed previousMinter, address indexed newMinter);
@@ -76,11 +79,14 @@ contract BeastNFT is ERC721, Ownable {
     }
 
     /// @notice Mint the success beast for one stake position of a session.
+    /// @dev Uses OZ `_mint` on purpose (contract-design section 6, R9): no
+    ///      `onERC721Received` callback is invoked, so a beneficiary contract
+    ///      can never revert-or-block the settlement that triggers the mint.
     /// @param to Staker receiving the beast (identifies the stake position).
     /// @param sessionId Session the stake position belongs to.
-    /// @param beastType Focus or habit.
-    /// @param measuredValue Declared minutes (focus) or cycle days (habit).
-    function mint(address to, uint256 sessionId, BeastType beastType, uint256 measuredValue)
+    /// @param kind Focus or habit.
+    /// @param metricValue Declared minutes (focus) or cycle days (habit).
+    function mint(address to, uint256 sessionId, Kind kind, uint256 metricValue)
         external
         returns (uint256 tokenId)
     {
@@ -89,31 +95,31 @@ contract BeastNFT is ERC721, Ownable {
         mintedBySession[sessionId][to] = true;
 
         tokenId = ++_nextTokenId;
-        Tier tier = tierOf(beastType, measuredValue);
+        Tier tier = tierOf(kind, metricValue);
         _meta[tokenId] = BeastMeta({
-            beastType: beastType,
+            kind: kind,
+            metricValue: metricValue,
             tier: tier,
-            measuredValue: measuredValue,
-            completedAt: block.timestamp,
+            completionDate: uint64(block.timestamp),
             sessionId: sessionId
         });
-        _safeMint(to, tokenId);
-        emit BeastMinted(tokenId, to, sessionId, beastType, measuredValue, tier);
+        _mint(to, tokenId);
+        emit BeastMinted(tokenId, to, sessionId, kind, metricValue, tier);
     }
 
     /// @notice Dual-track tier ladder (baseline v1.4 section 4.8):
     ///         focus >=120/50/25 min -> golden/adult/juvenile, else sprout;
     ///         habit >=21/7/3 days -> golden/adult/juvenile, else sprout.
-    function tierOf(BeastType beastType, uint256 measuredValue) public pure returns (Tier) {
-        if (beastType == BeastType.Focus) {
-            if (measuredValue >= 120) return Tier.Golden;
-            if (measuredValue >= 50) return Tier.Adult;
-            if (measuredValue >= 25) return Tier.Juvenile;
+    function tierOf(Kind kind, uint256 metricValue) public pure returns (Tier) {
+        if (kind == Kind.Focus) {
+            if (metricValue >= 120) return Tier.Golden;
+            if (metricValue >= 50) return Tier.Adult;
+            if (metricValue >= 25) return Tier.Juvenile;
             return Tier.Sprout;
         }
-        if (measuredValue >= 21) return Tier.Golden;
-        if (measuredValue >= 7) return Tier.Adult;
-        if (measuredValue >= 3) return Tier.Juvenile;
+        if (metricValue >= 21) return Tier.Golden;
+        if (metricValue >= 7) return Tier.Adult;
+        if (metricValue >= 3) return Tier.Juvenile;
         return Tier.Sprout;
     }
 
@@ -133,10 +139,12 @@ contract BeastNFT is ERC721, Ownable {
         revert Soulbound();
     }
 
-    /// @dev Minting (from == 0) stays allowed; any transfer between two
-    ///      addresses reverts, which covers transferFrom / safeTransferFrom.
+    /// @dev Minting (from == 0) stays allowed; any move of an already-owned
+    ///      token reverts (contract-design section 6: revert on any transfer
+    ///      where `from != address(0)`), covering transferFrom /
+    ///      safeTransferFrom and burns alike.
     function _update(address to, uint256 tokenId, address auth) internal override returns (address) {
-        if (_ownerOf(tokenId) != address(0) && to != address(0)) revert Soulbound();
+        if (_ownerOf(tokenId) != address(0)) revert Soulbound();
         return super._update(to, tokenId, auth);
     }
 
@@ -150,16 +158,16 @@ contract BeastNFT is ERC721, Ownable {
             '","description":"Soulbound beast minted for a completed StakeBeast stake position.",',
             '"attributes":[',
             '{"trait_type":"Beast Type","value":"',
-            m.beastType == BeastType.Focus ? "focus" : "habit",
+            m.kind == Kind.Focus ? "focus" : "habit",
             '"},',
             '{"trait_type":"Tier","value":"',
             _tierName(m.tier),
             '"},',
             '{"trait_type":"Measured Value","value":',
-            m.measuredValue.toString(),
+            m.metricValue.toString(),
             "},",
             '{"trait_type":"Completed At","value":',
-            m.completedAt.toString(),
+            uint256(m.completionDate).toString(),
             "},",
             '{"trait_type":"Session ID","value":',
             m.sessionId.toString(),
