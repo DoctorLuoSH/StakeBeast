@@ -1,18 +1,25 @@
 {
   "name": "stakebeast-attester",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
-  "description": "StakeBeast attestation service: heartbeat judgment (baseline v1.4 D2) and EIP-712 completion proof issuance.",
+  "description": "StakeBeast attestation service: heartbeat monitoring and EIP-712 completion attestation issuance (design freeze v4).",
   "license": "UNLICENSED",
   "engines": {
     "node": ">=16"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "test": "npm run build && node --test dist/test/",
-    "start": "npm run build && node dist/src/index.js"
+    "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
+    "build": "npm run clean && tsc -p tsconfig.json",
+    "dev": "npm run build && node dist/src/index.js",
+    "start": "npm run build && node dist/src/index.js",
+    "test": "npm run build && node --test dist/test/"
+  },
+  "dependencies": {
+    "ethers": "^6.13.0",
+    "express": "^4.21.0"
   },
   "devDependencies": {
+    "@types/express": "^4.17.21",
     "@types/node": "^20.11.0",
     "typescript": "^5.4.0"
   }
