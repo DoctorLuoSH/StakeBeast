@@ -89,6 +89,7 @@ contract StakeBeast is Ownable, ReentrancyGuard, EIP712 {
     error CheckInsPerDayOutOfRange(uint8 checkInsPerDay);
     error TargetCountOutOfRange(uint16 targetCount);
     error DuelTaskParamMismatch(); // Duel needs exactly one of duration / period
+error IncompatibleTaskParams(Mode mode); // param from the wrong metering track for the mode
     error SelfCounterparty(address caller);
     error VerifierRequired(); // Supervised creation needs a non-zero verifier
     error PayeeVerifierNotAllowed(Mode mode); // Payee.Verifier is human-proof only
@@ -696,10 +697,18 @@ contract StakeBeast is Ownable, ReentrancyGuard, EIP712 {
         uint16 targetCount
     ) internal pure {
         if (mode == Mode.SoloFocus || mode == Mode.CoFocus) {
+            // Machine-proof focus: duration is the only metering track
+            // (baseline 4.8); a stray period would contradict the window
+            // and the NFT kind.
+            if (periodDays != 0) revert IncompatibleTaskParams(mode);
             if (durationMinutes < MIN_DURATION_MINUTES || durationMinutes > MAX_DURATION_MINUTES) {
                 revert DurationOutOfRange(durationMinutes);
             }
         } else if (mode == Mode.Supervised) {
+            // Human-proof habit: period is the only metering track
+            // (baseline 4.2); a stray duration would shrink the task
+            // window to minutes while the NFT mints as Habit.
+            if (durationMinutes != 0) revert IncompatibleTaskParams(mode);
             _validateHabitParams(periodDays, checkInsPerDay, targetCount);
         } else {
             // Duel: exactly one task style (focus by duration xor habit by period).
