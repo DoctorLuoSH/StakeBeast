@@ -79,10 +79,11 @@ Scenario: SoloFocus session, stake 0.05 ETH, declared duration 2 minutes, payee 
 | Suite | Command | Result |
 | --- | --- | --- |
 | Contract unit tests (Forge, DAPP-3) | `npx hardhat test` | **133/133 passing**, no compiler warnings |
-| Attester unit tests (Pulse, DAPP-12) | `cd attester && npm test` | **30/30 passing** |
+| Attester unit tests (Pulse, DAPP-12) | `cd attester && npm test` | **30/30 passing** at the M2 run; **35/35 passing** after the DAPP-20 fix round (§8, incl. the new D1/D2 regression cases) |
 | E2E single-user success path (phase 1) | `scripts/e2e-solo-success.js` | **21/21 passing** (identical runtime code re-verified in phase 2) |
 | E2E failure & boundary paths (phase 2) | `scripts/e2e-failure-paths.js` | **46/46 passing** |
 | E2E mobile-wallet run (phase 2) | `scripts/e2e-mobile-wallet.js` | **14/14 passing** |
+| DAPP-20 fix-round regression (this branch @ `32d1f31`) | `cd attester && npm test`; `scripts/e2e-solo-success.js`; `scripts/e2e-failure-paths.js` | **35/35 + 21/21 + 46/46 passing** (rerun 2026-10-20 after the D1/D2 fixes) |
 
 ## 5. Phase 2 — failure & boundary spot-checks (DAPP-18)
 
@@ -155,9 +156,9 @@ All against S2's real attestation, via `staticCall` (no state change on revert):
 
 **Outcome: 46/46 PASS.**
 
-## 6. Phase 2 — mobile-wallet run (DAPP-18)
+## 6. Phase 2 — scripted mobile-wallet flow (DAPP-18)
 
-**Environment substitution (honest statement).** The agent runtime has no physical handset, so the run uses an **equivalent environment** as the task allows: a scripted wallet ("mobile-user", fresh Hardhat account #4) driving exactly the client surface a MetaMask-mobile in-app browser uses — connect (account funding), `personal_sign` for the bind challenge, plain `eth_sendTransaction` contract calls, and the same heartbeat wire protocol. Every signature and chain call is real; only the handset is substituted. Mobile-specific conditions are simulated where they affect the protocol: an ~8 s wallet-confirmation pause before `startSession`, and attestation polling started before the chain reaches `endTime`. **One manual pass on a physical MetaMask-mobile browser before the demo video remains a recommended leftover (§9).**
+**Environment substitution (honest statement).** The agent runtime has no physical handset, so this is **not a physical-device mobile test**: it is a scripted wallet simulation of the mobile flow, and the script-driven run passed. The run uses an **equivalent environment** as the task allows: a scripted wallet ("mobile-user", fresh Hardhat account #4) driving exactly the client surface a MetaMask-mobile in-app browser uses — connect (account funding), `personal_sign` for the bind challenge, plain `eth_sendTransaction` contract calls, and the same heartbeat wire protocol. Every signature and chain call is real; only the handset is substituted. Mobile-specific conditions are simulated where they affect the protocol: an ~8 s wallet-confirmation pause before `startSession`, and attestation polling started before the chain reaches `endTime`. **Physical-handset acceptance is still open: one manual pass on a real MetaMask-mobile browser (app backgrounding/foregrounding during a session, wallet interaction sheets) is deferred to the M4 rehearsal (§9).**
 
 Step log (UX step → wire action) of the recorded run (2026-10-20 ~07:55–07:59 UTC, session 2, window `startTime 1792483003 → endTime 1792483123`):
 
@@ -193,7 +194,9 @@ Step log (UX step → wire action) of the recorded run (2026-10-20 ~07:55–07:5
 
 ## 8. Issue log and fixes
 
-All five issues found across both phases were harness/tooling bugs — **no contract-side or protocol-logic defect was found**; nothing needed escalation to Forge.
+Scope statement (replacing the earlier blanket "no defect" conclusion): within the coverage of the phase-1/2 integration runs, every issue found was a harness/tooling bug — **no contract-side defect surfaced in those runs**. That conclusion is limited to what those runs exercised: the M2 code review afterwards reproduced two **protocol-logic defects in the attester** (I-6, I-7) that the integration scenarios had not isolated, plus one harness timing bug they exposed (I-8). All three are fixed on this branch (DAPP-20).
+
+Count reconciliation: **phase 1 found 3 issues (I-1…I-3)**, all in the phase-1 harness surface (two E2E-script bugs + the Windows test-runner invocation); **phase 2 found 2 more (I-4, I-5)** — the complete phase-1+2 list is I-1…I-5, all harness/tooling, nothing escalated to Forge. The M2-review fix round adds I-6…I-8 below.
 
 | # | Severity | Symptom | Root cause | Fix | Status |
 | --- | --- | --- | --- | --- | --- |
@@ -202,12 +205,17 @@ All five issues found across both phases were harness/tooling bugs — **no cont
 | I-3 | medium | `cd attester && npm test` failed on Windows/Node 22 with `Cannot find module …\dist\test` | Node 22 on Windows does not scan a directory argument passed as `node --test dist/test/`; a glob argument is expanded by Node itself | `attester/package.json` test script → `node --test "dist/test/*.test.js"` | fixed, verified (30/30) |
 | I-4 | low | every `expectRevert` check mis-reported a genuine revert as FAIL (`ProviderError: VM Exception…`) | Hardhat wraps `staticCall` revert data as `{message, data}` at `e.data.data`, not `e.data` | extract hex from `e.data.data` fallback chain before `parseError` (`scripts/e2e-*.js`) | fixed, verified (46/46) |
 | I-5 | low | mobile run observed 0 × 425: the first attestation poll already returned 200 | heartbeat loop ran to `endTime + 1 s` (+5 s sleep), so polling started only after the chain had passed `endTime` | stop the loop 2 s before `endTime`; polling then catches 425 × 2 → 200 (`scripts/e2e-mobile-wallet.js`) | fixed, verified (14/14) |
+| I-6 (**D1**) | **high** | M2 review: a compliant user flagged `heartbeat_timeout` — accepted heartbeats at +0 s / +4 s / +18 s judged as an 18 s silence | the 5 s coverage-watermark journal throttle (`core.ts`) dropped valid heartbeat records; gap analysis scored only the throttled journal, inventing phantom gaps | journal every accepted heartbeat — the judgment stream is never throttled, and restart replay rebuilds the identical sequence (`f469b25`) | fixed, verified (unit 35/35 incl. new D1 edge + restart-consistency cases; E2E 21/21 + 46/46) |
+| I-7 (**D2**) | **high** | M2 review: a 60 s session clean only to +40 s with the next heartbeat at +61 s was judged `clean` and signed — incomplete monitoring obtained a success proof | the tail check (`scoring.ts`) took the last journaled record even when it arrived after `endTime`, letting an out-of-window arrival mask the in-window tail gap | tail coverage is computed from in-window coverage points only; out-of-window arrivals no longer change the judgment (`f469b25`) | fixed, verified (unit 35/35 incl. the three new tail scenarios; E2E 21/21 + 46/46) |
+| I-8 | low | after the D1/D2 fix, B-10 ("10 s refresh gap") failed: the service flagged a violation | harness bug exposed by the corrected scorer: the cadence loop's trailing 5 s sleep plus the separate 10 s sleep made B-10's real gap ~15.1 s — a genuine violation the old one-beat-late scorer surfaced only after the check sampled the flag | `scripts/e2e-failure-paths.js` B-10: extra sleep 10 s → 5 s so the actual gap is 10 s (`32d1f31`) | fixed, verified (46/46) |
 
 Environment note for the runbook: stopping `npx hardhat node` via the task wrapper leaves the child `node.exe` holding port 8545; a redeploy against the stale chain then lands on unexpected addresses. Kill the exact listener PID (or verify the port is free) before redeploying — hit again in phase 2 and handled the same way. Operational only, no code change. (Feeding M4 runbook.)
 
+Fix-round regression (DAPP-20, branch `agent/pulse/edb8224ecc50` @ `32d1f31`, rerun 2026-10-20): attester unit **35/35** (30 previous + 4 new D1/D2 regression cases + 1 restart-consistency case), E2E phase 1 **21/21**, E2E phase 2 **46/46**. New unit cases: sub-5 s heartbeat-interval edge (D1), tail gap covered by a post-`endTime` arrival (D2), tail boundary with the last beat exactly at `endTime`, tail gap under late-learned chain window (D2 + AC-27), and D1 restart consistency (replay rebuilds the complete sequence).
+
 ## 9. Leftovers and explicit non-goals
 
-- **Physical handset pass (recommended, non-blocking):** the mobile flow is verified in a scripted-wallet equivalent environment (§6); one manual MetaMask-mobile browser pass is recommended before the demo video. Owner: team member with a handset; no code dependency.
+- **Physical handset pass (open, assigned to M4 rehearsal):** the mobile flow so far is verified as a scripted wallet simulation (§6), not on a real device. The remaining acceptance step — a manual MetaMask-mobile browser pass covering app backgrounding/foregrounding mid-session and wallet interaction sheets — is scheduled for the M4 demo rehearsal. Owner: team member with a handset; no code dependency.
 - **Clock-skew refusal paths (`unreliable_time` / `uncertifiable`)** require server-clock/RPC-staleness manipulation and stay in attester unit-test territory (30/30, `recovery.test.ts` / protocol suites) — no integration case added.
 - **Exact boundary exactness** (14 s vs 16 s gap, `settlementDeadline ± 1`) is asserted by the unit suites (133/133 contract, 30/30 attester); integration spot-checks use 10 s / 18 s margins per AC-12 text.
 - **Duel / co-focus integration runs** are outside M2 scope (P1/P2); their settlement matrices are unit-covered (AC-05/15/19/20/23/24 in `test/StakeBeast.cofocus.test.js` / `humanproof.test.js`).
