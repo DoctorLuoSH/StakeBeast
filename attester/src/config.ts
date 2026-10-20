@@ -2,16 +2,28 @@
  * Service configuration from environment variables (secrets only ever come from
  * the environment; nothing is hard-coded in the repo). A minimal `.env` file
  * loader is included so local one-command startup works without extra deps.
+ *
+ * Environment (attester-service.md §8):
+ *   RPC_URL               JSON-RPC endpoint (default http://127.0.0.1:8545)
+ *   CONTRACT_ADDRESS      deployed StakeBeast contract (required)
+ *   ATTESTER_PRIVATE_KEY  0x-prefixed signing key (required; no transfer authority)
+ *   PORT                  HTTP listen port (default 3001)
+ *   DATA_DIR              durable state directory (default ./data)
+ *   CHAIN_ID              optional safety check against the RPC network
+ *   CORS_ORIGIN           browser origin allowlist (default * — local dev)
  */
 
 import { existsSync, readFileSync } from 'node:fs';
 
 export interface Config {
+  rpcUrl: string;
+  contractAddress: string;
+  attesterPrivateKey: string;
   port: number;
-  dbPath: string;
-  /** 0x-prefixed 32-byte key for EIP-712 proof signing, undefined if unset. */
-  attesterPrivateKey: string | undefined;
+  dataDir: string;
+  /** 0 = auto-detect from the RPC network at boot. */
   chainId: number;
+  corsOrigin: string;
 }
 
 /** Minimal .env loader: KEY=VALUE lines, `#` comments, no expansion. */
@@ -33,19 +45,23 @@ const PLACEHOLDER = '0xREPLACE_WITH_ATTESTER_PRIVATE_KEY';
 export function loadConfig(envPath = '.env'): Config {
   loadDotEnv(envPath);
   const key = process.env.ATTESTER_PRIVATE_KEY;
-  const usableKey = key && key !== PLACEHOLDER ? key : undefined;
-  if (usableKey && !/^0x[0-9a-fA-F]{64}$/.test(usableKey)) {
+  if (!key || key === PLACEHOLDER) {
+    throw new Error('ATTESTER_PRIVATE_KEY is required (0x-prefixed 32-byte hex)');
+  }
+  if (!/^0x[0-9a-fA-F]{64}$/.test(key)) {
     throw new Error('ATTESTER_PRIVATE_KEY must be a 0x-prefixed 32-byte hex string');
   }
-  if (!usableKey) {
-    // Signing is not active yet (EIP-712 fields pending DAPP-2), so this is a
-    // warning, not a fatal error. It becomes fatal once proof issuance lands.
-    console.warn('[config] ATTESTER_PRIVATE_KEY not set; proof signing is disabled');
+  const contract = process.env.CONTRACT_ADDRESS ?? '';
+  if (!/^0x[0-9a-fA-F]{40}$/.test(contract)) {
+    throw new Error('CONTRACT_ADDRESS is required (0x-prefixed 20-byte hex)');
   }
   return {
-    port: Number(process.env.PORT ?? 8787),
-    dbPath: process.env.ATTESTER_DB_PATH ?? './data/attester.json',
-    attesterPrivateKey: usableKey,
-    chainId: Number(process.env.CHAIN_ID ?? 11155111),
+    rpcUrl: process.env.RPC_URL ?? 'http://127.0.0.1:8545',
+    contractAddress: contract,
+    attesterPrivateKey: key,
+    port: Number(process.env.PORT ?? 3001),
+    dataDir: process.env.DATA_DIR ?? './data',
+    chainId: Number(process.env.CHAIN_ID ?? 0),
+    corsOrigin: process.env.CORS_ORIGIN ?? '*',
   };
 }

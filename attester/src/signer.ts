@@ -1,46 +1,90 @@
 /**
- * EIP-712 completion-proof signer — INTERFACE AND CONFIG PLACEHOLDER ONLY.
+ * EIP-712 completion attestation (design freeze: contract-design.md §4).
  *
- * The typed-data domain and message fields are frozen in DAPP-2 (api-contract.md)
- * together with Forge (contracts). Until then this module defines the seam the
- * HTTP layer calls, and refuses to produce signatures. Alignment notes captured
- * so far (from baseline v1.4, NOT final):
- *  - the proof attests a clean session over the full declared [startTime, endTime];
- *  - settlement (AC-02) must reject proofs for another address/session/chain and
- *    replayed or expired proofs, so the message will likely carry at least the
- *    session id, participant, startTime, endTime and a deadline;
- *  - the service key has no transfer authority; it only signs.
+ * Domain: EIP712Domain(name="StakeBeast", version="1", chainId, verifyingContract).
+ * Message (single type, covers SoloFocus and CoFocus):
+ *   CompletionAttestation(uint256 sessionId, address staker, address partner,
+ *                         uint64 startTime, uint64 endTime, uint64 expiry)
+ * with expiry == session.settlementDeadline.
  *
- * TODO(DAPP-2): freeze domain { name, version, chainId, verifyingContract } and
- * the CompletionProof message type; implement with ethers v6 TypedDataEncoder.
+ * The contract rebuilds the digest from stored session fields and requires the
+ * recovered signer to equal the CURRENT on-chain attester — field mismatches
+ * revert by construction, and rotation invalidates old signatures (R2).
  */
 
-import type { SessionState } from './judgment';
-import type { Config } from './config';
+import { ethers, type TypedDataField } from 'ethers';
 
-export interface CompletionProof {
-  sessionId: string;
-  participant: string;
-  startTime: number;
-  endTime: number;
-  /** EIP-712 signature over the frozen typed-data structure. */
-  signature: string;
+export const EIP712_DOMAIN_NAME = 'StakeBeast';
+export const EIP712_DOMAIN_VERSION = '1';
+
+export const COMPLETION_ATTESTATION_TYPES: Record<string, TypedDataField[]> = {
+  CompletionAttestation: [
+    { name: 'sessionId', type: 'uint256' },
+    { name: 'staker', type: 'address' },
+    { name: 'partner', type: 'address' },
+    { name: 'startTime', type: 'uint64' },
+    { name: 'endTime', type: 'uint64' },
+    { name: 'expiry', type: 'uint64' },
+  ],
+};
+
+export interface AttestationMessage {
+  sessionId: string; // decimal string
+  staker: string; // EIP-55
+  partner: string; // EIP-55 or zero address
+  startTime: number; // seconds
+  endTime: number; // seconds
+  expiry: number; // seconds == settlementDeadline
 }
 
-export interface Signer {
-  /** True once ATTESTER_PRIVATE_KEY is configured and DAPP-2 fields are frozen. */
-  readonly ready: boolean;
-  signCompletionProof(session: SessionState): Promise<CompletionProof>;
-}
-
-export function createSigner(config: Config): Signer {
-  return {
-    ready: config.attesterPrivateKey !== undefined,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    async signCompletionProof(_session: SessionState): Promise<CompletionProof> {
-      // TODO(DAPP-2): build typed data from the frozen domain/message fields and
-      // sign with config.attesterPrivateKey via ethers v6.
-      throw new Error('EIP-712 proof signing is not implemented yet: domain and message fields are frozen in DAPP-2');
-    },
+export interface TypedData {
+  domain: {
+    name: string;
+    version: string;
+    chainId: number;
+    verifyingContract: string;
   };
+  types: typeof COMPLETION_ATTESTATION_TYPES;
+  primaryType: 'CompletionAttestation';
+  message: AttestationMessage;
+}
+
+export function buildTypedData(
+  chainId: number,
+  verifyingContract: string,
+  message: AttestationMessage,
+): TypedData {
+  return {
+    domain: {
+      name: EIP712_DOMAIN_NAME,
+      version: EIP712_DOMAIN_VERSION,
+      chainId,
+      verifyingContract: ethers.getAddress(verifyingContract),
+    },
+    types: COMPLETION_ATTESTATION_TYPES,
+    primaryType: 'CompletionAttestation',
+    message,
+  };
+}
+
+export class AttestationSigner {
+  readonly wallet: ethers.Wallet;
+
+  constructor(privateKey: string) {
+    this.wallet = new ethers.Wallet(privateKey);
+  }
+
+  get address(): string {
+    return this.wallet.address;
+  }
+
+  /** Sign the attestation; returns the exact typed data plus the signature. */
+  async sign(typedData: TypedData): Promise<string> {
+    return this.wallet.signTypedData(typedData.domain, typedData.types, typedData.message);
+  }
+}
+
+/** Recover the signer of an attestation (used by tests and diagnostics). */
+export function recoverSigner(typedData: TypedData, signature: string): string {
+  return ethers.verifyTypedData(typedData.domain, typedData.types, typedData.message, signature);
 }
