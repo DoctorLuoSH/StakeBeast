@@ -18,6 +18,15 @@ module.exports = {
     },
   },
   networks: {
+    hardhat: {
+      // `npx hardhat node` for local integration: opt into interval mining via
+      // env so the attester's signing gate always sees fresh blocks without a
+      // transaction (attester README, "Local demo"). Unit tests run without the
+      // variable and keep plain automine.
+      mining: process.env.HARDHAT_MINING_INTERVAL
+        ? { auto: true, interval: Number(process.env.HARDHAT_MINING_INTERVAL) }
+        : { auto: true },
+    },
     sepolia: {
       url: process.env.RPC_URL || "",
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
