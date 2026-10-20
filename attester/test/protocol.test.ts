@@ -173,6 +173,109 @@ test('out-of-window events are never scored (arming bubble + post-end immunity)'
   rig.cleanup();
 });
 
+test('D1 regression: <5 s heartbeat intervals never false-flag a timeout (journal throttle)', async () => {
+  const rig = makeRig();
+  rig.chain.addSession('7', soloSession(walletA.address, START_SEC, 60, Status.Active));
+  const { token } = await bindWallet(rig, walletA, '7');
+  const auth = authOf(rig, token);
+  await rig.core.watchOnce();
+
+  // Review reproduction: accepted heartbeats at +0 s / +4 s / +18 s. The +4 s
+  // record fell under the 5 s journal throttle, leaving a phantom 18 s gap.
+  rig.advanceTo(START_SEC * 1000);
+  rig.core.heartbeat(auth, { sessionId: '7', seq: 1, clientTs: rig.nowMs });
+  rig.advanceBy(4_000);
+  rig.core.heartbeat(auth, { sessionId: '7', seq: 2, clientTs: rig.nowMs });
+  rig.advanceBy(14_000);
+  rig.core.heartbeat(auth, { sessionId: '7', seq: 3, clientTs: rig.nowMs });
+  assert.equal(auth.session.violation, null, 'gaps are 4 s and 14 s — both inside the grace');
+
+  // The next arrival is where the phantom 0→18 s gap used to be scored.
+  rig.advanceBy(5_000);
+  rig.core.heartbeat(auth, { sessionId: '7', seq: 4, clientTs: rig.nowMs });
+  assert.equal(auth.session.violation, null, 'no false heartbeat_timeout from throttled journaling');
+
+  // A compliant user must get the proof: finish the window and collect it.
+  heartbeatSeries(rig, token, '7', 5, 8); // +28 s … +63 s cadence
+  rig.advanceTo((START_SEC + 61) * 1000);
+  const res = await rig.core.attestation(auth, '7', {});
+  assert.ok(res.signature);
+  rig.cleanup();
+});
+
+test('D2 regression: a heartbeat arriving AFTER endTime does not cover the in-window tail gap', async () => {
+  const rig = makeRig();
+  rig.chain.addSession('7', soloSession(walletA.address, START_SEC, 60, Status.Active));
+  const { token } = await bindWallet(rig, walletA, '7');
+  const auth = authOf(rig, token);
+  await rig.core.watchOnce();
+
+  // Clean coverage until +40 s of a 60 s window, silence, next arrival +61 s.
+  rig.advanceTo(START_SEC * 1000);
+  heartbeatSeries(rig, token, '7', 1, 9); // +0 s … +40 s
+  rig.advanceTo((START_SEC + 61) * 1000);
+  rig.core.heartbeat(auth, { sessionId: '7', seq: 10, clientTs: rig.nowMs });
+
+  // The out-of-window arrival must not mask the 40 s → 60 s gap: 20 s of
+  // in-window silence is a violation (frozen rule — out-of-window events do
+  // not change the judgment).
+  const v = auth.session.violation;
+  assert.equal(v?.reason, 'heartbeat_timeout');
+  assert.equal(v?.atMs, START_SEC * 1000 + 55_000, 'gap runs past grace at +40 s + 15 s');
+
+  await assert.rejects(rig.core.attestation(auth, '7', {}), (err: ApiError) => {
+    assert.equal(err.status, 409);
+    assert.equal(err.message, 'violation');
+    return true;
+  });
+  rig.cleanup();
+});
+
+test('D2 boundary: a heartbeat arriving exactly AT endTime counts as in-window coverage', async () => {
+  const rig = makeRig();
+  rig.chain.addSession('7', soloSession(walletA.address, START_SEC, 60, Status.Active));
+  const { token } = await bindWallet(rig, walletA, '7');
+  const auth = authOf(rig, token);
+  await rig.core.watchOnce();
+
+  // Full 5 s cadence through the window, last beat exactly at endTime.
+  rig.advanceTo(START_SEC * 1000);
+  heartbeatSeries(rig, token, '7', 1, 12); // +0 s … +55 s
+  rig.advanceTo((START_SEC + 60) * 1000);
+  rig.core.heartbeat(auth, { sessionId: '7', seq: 13, clientTs: rig.nowMs });
+  assert.equal(auth.session.violation, null, 'arrival at the end moment is inside the window');
+
+  const res = await rig.core.attestation(auth, '7', {});
+  assert.ok(res.signature, 'clean window with an end-exact last beat is attestable');
+  rig.cleanup();
+});
+
+test('D2 regression: late-learned window re-evaluation ignores the after-end arrival for the tail', async () => {
+  const rig = makeRig();
+  rig.chain.addSession('7', soloSession(walletA.address, START_SEC));
+  const { token } = await bindWallet(rig, walletA, '7');
+  const auth = authOf(rig, token);
+  rig.chain.addTx(TX_HASH, { to: CONTRACT, from: walletA.address, data: encodeStartSession('7'), nonce: 0, receipt: null });
+  await rig.core.arm(auth, { sessionId: '7', txHash: TX_HASH });
+
+  // The start confirms on-chain but the service has not learned the window
+  // yet (still `arming`): coverage arrives 0…40 s, then one late beat +61 s.
+  rig.chain.addSession('7', soloSession(walletA.address, START_SEC, 60, Status.Active));
+  rig.advanceTo(START_SEC * 1000);
+  heartbeatSeries(rig, token, '7', 1, 9); // +0 s … +40 s while the window is unknown locally
+  rig.advanceTo((START_SEC + 61) * 1000);
+  rig.core.heartbeat(auth, { sessionId: '7', seq: 10, clientTs: rig.nowMs });
+  assert.equal(auth.session.violation, null, 'nothing scored before the window is learned');
+
+  await rig.core.watchOnce(); // learns [start, start+60] and re-evaluates the journal
+  const s = auth.session;
+  assert.equal(s.violation?.reason, 'heartbeat_timeout');
+  assert.equal(s.violation?.atMs, START_SEC * 1000 + 55_000);
+  assert.equal(s.judgment, 'violation');
+  await assert.rejects(rig.core.attestation(auth, '7', {}), (err: ApiError) => err.status === 409 && err.message === 'violation');
+  rig.cleanup();
+});
+
 test('late new bind after startTime + 5 min -> too_late (co-focus partner, AC-21)', async () => {
   const rig = makeRig();
   rig.chain.addSession('9', cofocusSession(walletA.address, walletB.address, START_SEC, 180, Status.Active));

@@ -114,9 +114,13 @@ export function scoreCoverage(
       });
     }
   }
-  // Tail gap: last coverage -> range end.
-  const last = hbs.length > 0 ? hbs[hbs.length - 1] : null;
-  if (last && last.utc < end) {
+  // Tail gap: last IN-WINDOW coverage -> range end. Records arriving at or
+  // after the range end are out of window: they never patch an in-window gap
+  // (frozen rule — out-of-window events do not change the judgment; DAPP-20
+  // D2: a post-end heartbeat must not mask a silent tail).
+  const covered = hbs.filter((h) => h.utc < end);
+  const last = covered.length > 0 ? covered[covered.length - 1] : null;
+  if (last) {
     segments.push(
       last.runId === currentRunId
         ? { from: Math.max(last.utc, start), to: end, reliability: 'up' }

@@ -13,11 +13,13 @@
  * boot instant, and unverifiable in-window downtime routes to `uncertifiable`,
  * never to a remap.
  *
- * Journal volume note: §5 throttles the heartbeat watermark to 1 write / 5 s.
- * We keep that throttle for the coverage watermark (the records gap analysis
- * replays), and journal a tiny per-heartbeat `seq` marker so the anti-replay
- * watermark (AC-30) survives restarts exactly; live state and replayed state
- * are identical by construction.
+ * Journal volume note: §5 once throttled the coverage watermark to 1 write /
+ * 5 s. That throttle was removed (DAPP-20 D1): gap analysis replays exactly
+ * the journaled heartbeat sequence, so every accepted heartbeat is journaled
+ * — dropping records made the scorer miss valid coverage and false-flag
+ * `heartbeat_timeout`. The judgment stream is never throttled; live state and
+ * replayed state are identical by construction, and the tiny per-heartbeat
+ * `seq` marker keeps the anti-replay watermark (AC-30) exact across restarts.
  */
 
 import {
@@ -41,8 +43,6 @@ export const HEARTBEAT_CADENCE_MS = 5_000;
 export const BIND_WINDOW_MS = 5 * 60_000;
 export const CHALLENGE_TTL_MS = 5 * 60_000;
 export const CLOCK_SKEW_TOLERANCE_MS = 30_000;
-/** Heartbeat watermark journal throttle (§5). */
-export const HB_WATERMARK_JOURNAL_MS = 5_000;
 
 /** A server-side receive record: run id + monotonic ms + server UTC ms. */
 export interface ReceiveRec {
@@ -74,11 +74,11 @@ export interface ParticipantRec {
   ready: boolean;
   /** Highest accepted heartbeat seq (strictly-increasing track, AC-30). */
   highestSeq: number;
-  /** Journaled coverage watermarks (accepted heartbeats), arrival order. */
+  /** Journaled coverage records (every accepted heartbeat), arrival order. */
   heartbeats: ReceiveRec[];
   /** sha256 hex of the current client token; null when never bound. */
   tokenHash: string | null;
-  /** UTC ms of the last journaled heartbeat watermark (throttle marker). */
+  /** UTC ms of the last journaled coverage record. */
   lastHbWatermarkMs: number;
 }
 
@@ -296,8 +296,9 @@ export class AttesterStore {
         break;
       }
       case 'hb': {
-        // Coverage watermark (throttled by the caller): gap analysis replays
-        // exactly these records, so live and post-restart scoring agree.
+        // Coverage record (journaled for every accepted heartbeat): gap
+        // analysis replays exactly these records, so live and post-restart
+        // scoring agree.
         const p = this.participantOf(entry.key, entry.participant);
         if (p) {
           p.heartbeats.push(entry.rec);
