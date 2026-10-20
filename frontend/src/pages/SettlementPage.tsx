@@ -1,9 +1,9 @@
 /**
- * SettlementPage — session outcome view skeleton.
- * Success: stake credited to withdrawable balance + beast minted.
- * Failure: beast fled + forfeit destination summary.
- * Withdraw entry (claimable balance) is a P0 requirement; the actual
- * contract call lands with ABI integration.
+ * SettlementPage — session outcome view (baseline §4.7).
+ * Success: stake credited to the withdrawable balance + beast minted.
+ * Failure: runaway animation → withered remnant, no mint, forfeit route.
+ * Both outcomes render as labelled previews until contract data is wired
+ * (DAPP-4); the withdraw entry is a P0 requirement.
  */
 
 import { WalletGate } from "../components/wallet/WalletGate";
@@ -18,15 +18,33 @@ export function SettlementPage() {
       <div className="settlement">
         <h1>Settlement</h1>
 
-        <section className="card settlement__result">
-          <BeastSprite stage="adult" mood="minted" progress={1} size={180} />
-          <div>
-            <h2>Outcome goes here</h2>
-            <p className="muted">
-              Success shows the minted beast and the stake moving to your
-              withdrawable balance; failure shows the fled beast and where the
-              stake went (supervisor / friend / charity).
-            </p>
+        <section className="card settlement__result settlement__result--success">
+          <span className="badge badge--p0">Success preview</span>
+          <div className="settlement__row">
+            <BeastSprite stage="adult" mood="happy" progress={1} size={170} />
+            <div>
+              <h2>Beast minted, stake returned</h2>
+              <p className="muted">
+                The verified session mints an untransferable beast into your
+                zoo, and the stake is credited to your withdrawable balance
+                below.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section className="card settlement__result settlement__result--failure">
+          <span className="badge badge--p1">Failure preview</span>
+          <div className="settlement__row">
+            <BeastSprite stage="young" mood="fled" progress={1} size={170} />
+            <div>
+              <h2>The beast ran away</h2>
+              <p className="muted">
+                Failed sessions mint no NFT. The stake is paid along the
+                preset forfeit route — supervisor, friend, or charity —
+                chosen when the session was created.
+              </p>
+            </div>
           </div>
         </section>
 
