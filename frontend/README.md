@@ -23,7 +23,7 @@ npm run dev            # http://localhost:5173
 ```
 
 Other scripts: `npm run build` (type-check + production build),
-`npm run preview`, `npm run lint`.
+`npm run preview`, `npm run lint`, `npm test` (vitest component tests).
 
 ## Environment variables
 
@@ -38,6 +38,7 @@ prefix — the repository carries **zero hardcoded addresses**. See
 | `VITE_PROOF_SERVICE_URL` | Machine-attestation service (WP3) |
 | `VITE_API_BASE_URL` | Social backend REST API (P1, WP4) |
 | `VITE_SEPOLIA_RPC_URL` | Optional RPC used when adding Sepolia to a wallet |
+| `VITE_DEMO_MODE` | `true` enables the zoo sample shelf in built bundles (dev server always counts as demo mode) |
 
 ## Wallet flow
 
@@ -61,7 +62,8 @@ src/
 │   ├── wallet/      # ConnectButton, WalletGate (guards pages by wallet state)
 │   ├── states/      # NoMetaMask, WrongNetwork, EmptyState screens
 │   ├── tx/          # TxStatusBanner (pending/success/failure + Etherscan link)
-│   ├── beast/       # BeastSprite (SVG growth/flee animation pipeline), BeastCard
+│   ├── beast/       # BeastSprite (SVG growth/flee animation pipeline), BeastCard,
+│   │                # ZooShelf (real mints / demo samples / empty state — mutually exclusive)
 │   └── CountdownTimer.tsx
 └── pages/           # Home, CreateSession (4 modes), FocusSession, Settlement,
                      # Review (supervisor), Profile/My Zoo, NotFound

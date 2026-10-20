@@ -1,15 +1,13 @@
 /**
  * ProfilePage — personal record + "My Zoo" NFT gallery (baseline §4.7,
  * PRD §14.5). Record stats stay skeletons until contract reads land; the
- * zoo shelf renders as a responsive card grid with tier-distinct beast
- * cards (Sprout / Juvenile / Adult / Golden) and an egg empty state.
+ * zoo shelf (ZooShelf) renders exactly one view per state: real minted
+ * beasts, the demo-mode sample shelf, or the egg empty state.
  */
 
 import { WalletGate } from "../components/wallet/WalletGate";
-import { BeastSprite } from "../components/beast/BeastSprite";
-import { BeastCard } from "../components/beast/BeastCard";
-import type { BeastStage, BeastTier } from "../components/beast/BeastSprite";
-import { EmptyState } from "../components/states/EmptyState";
+import { ZooShelf } from "../components/beast/ZooShelf";
+import type { BeastEntry } from "../components/beast/zooView";
 import "./ProfilePage.css";
 
 const STAT_SLOTS = [
@@ -20,15 +18,14 @@ const STAT_SLOTS = [
 ];
 
 /**
- * Sample shelf demonstrating the four §4.8 tiers until contract reads are
- * wired — one card per tier, metrics mirroring the focus-minute ladder.
+ * Real minted beasts load with contract reads (DAPP-4); empty until then.
+ * The shelf view (real cards / demo samples / empty state) is decided inside
+ * ZooShelf so samples and the empty state can never render together.
  */
-const SAMPLE_BEASTS: Array<{ stage: BeastStage; tier: BeastTier; metric: string; date: string }> = [
-  { stage: "sprout", tier: "seedling", metric: "24 min focus", date: "2026-10-11" },
-  { stage: "young", tier: "young", metric: "25 min focus", date: "2026-10-13" },
-  { stage: "adult", tier: "adult", metric: "50 min focus", date: "2026-10-15" },
-  { stage: "golden", tier: "golden", metric: "120 min focus", date: "2026-10-18" },
-];
+const MINTED_BEASTS: BeastEntry[] = [];
+
+/** Sample shelf is a dev/demo aid only (dev server or VITE_DEMO_MODE=true). */
+const DEMO_MODE = import.meta.env.DEV || import.meta.env.VITE_DEMO_MODE === "true";
 
 export function ProfilePage() {
   return (
@@ -49,25 +46,9 @@ export function ProfilePage() {
           <h2>Beast shelf</h2>
           <p className="muted">
             Untransferable beasts minted from completed sessions — tiered by
-            declared duration (focus) or period days (habit). Sample shelf
-            below shows the four tiers; real mints load with contract reads.
+            declared duration (focus) or period days (habit).
           </p>
-          <div className="profile__zoo">
-            {SAMPLE_BEASTS.map((b) => (
-              <BeastCard
-                key={b.tier}
-                stage={b.stage}
-                tier={b.tier}
-                metric={b.metric}
-                date={b.date}
-              />
-            ))}
-          </div>
-          <EmptyState
-            icon={<BeastSprite stage="sprout" mood="growing" progress={0} size={72} />}
-            title="No beasts yet"
-            hint="Complete a session to mint your first beast into the zoo."
-          />
+          <ZooShelf beasts={MINTED_BEASTS} demoMode={DEMO_MODE} />
         </section>
       </div>
     </WalletGate>
