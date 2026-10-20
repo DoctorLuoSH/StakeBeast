@@ -55,6 +55,15 @@ describe("BeastNFT", function () {
   });
 
   describe("mint permission", function () {
+    it("mints to a contract whose receiver hook always reverts (R9: _mint, no callback)", async function () {
+      const Probes = await ethers.getContractFactory("HookRevertingReceiver");
+      const probe = await Probes.deploy();
+      await probe.waitForDeployment();
+      // Would revert with _safeMint; succeeds because mint uses _mint.
+      await expect(mintTo({ address: await probe.getAddress() }, 1, FOCUS, 60)).to.emit(nft, "BeastMinted");
+      expect(await nft.balanceOf(await probe.getAddress())).to.equal(1);
+    });
+
     it("reverts for any caller other than the minter", async function () {
       for (const caller of [owner, alice, bob]) {
         await expect(
@@ -101,10 +110,10 @@ describe("BeastNFT", function () {
       const receipt = await tx.wait();
       const block = await ethers.provider.getBlock(receipt.blockNumber);
       const meta = await nft.beastMeta(1);
-      expect(meta.beastType).to.equal(FOCUS);
+      expect(meta.kind).to.equal(FOCUS);
       expect(meta.tier).to.equal(GOLDEN);
-      expect(meta.measuredValue).to.equal(120);
-      expect(meta.completedAt).to.equal(block.timestamp);
+      expect(meta.metricValue).to.equal(120);
+      expect(meta.completionDate).to.equal(block.timestamp);
       expect(meta.sessionId).to.equal(3);
     });
   });
@@ -184,6 +193,21 @@ describe("BeastNFT", function () {
 
     it("reverts for a non-existent token", async function () {
       await expect(nft.tokenURI(42)).to.be.revertedWithCustomError(nft, "ERC721NonexistentToken");
+    });
+
+    it("renders every tier name in the metadata", async function () {
+      await mintTo(alice, 1, FOCUS, 10); // sprout
+      await mintTo(alice, 2, FOCUS, 25); // juvenile
+      await mintTo(alice, 3, FOCUS, 50); // adult
+      const tiers = ["sprout", "juvenile", "adult"];
+      for (let tokenId = 1; tokenId <= 3; tokenId++) {
+        const uri = await nft.tokenURI(tokenId);
+        const json = JSON.parse(
+          Buffer.from(uri.replace("data:application/json;base64,", ""), "base64").toString("utf8")
+        );
+        const attrs = Object.fromEntries(json.attributes.map((a) => [a.trait_type, a.value]));
+        expect(attrs["Tier"]).to.equal(tiers[tokenId - 1]);
+      }
     });
   });
 });

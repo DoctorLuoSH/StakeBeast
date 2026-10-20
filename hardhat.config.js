@@ -3,6 +3,7 @@ require("@nomicfoundation/hardhat-ethers");
 require("@nomicfoundation/hardhat-chai-matchers");
 require("@nomicfoundation/hardhat-network-helpers");
 require("@nomicfoundation/hardhat-verify");
+require("solidity-coverage");
 
 /** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {
@@ -11,6 +12,9 @@ module.exports = {
     settings: {
       evmVersion: "cancun",
       optimizer: { enabled: true, runs: 200 },
+      // The 24-field Session struct (public getter + getSession copies) needs
+      // the IR pipeline to avoid legacy-codegen stack-too-deep.
+      viaIR: true,
     },
   },
   networks: {
