@@ -1,79 +1,116 @@
 # StakeBeast Attestation Service
 
-Attestation (proof) service for StakeBeast machine-verified focus sessions. It
-tracks client heartbeats, applies the frozen violation rules, and will issue
-EIP-712 completion proofs for clean sessions that cover the full declared
-duration. The service holds no transfer authority; it only signs.
+The automated completion verifier for StakeBeast machine-proof sessions (solo
+focus and co-focus), per the frozen design (`docs/attester-service.md` v4 +
+freeze errata, `docs/contract-design.md` §4, `docs/api-contract.md` §B).
+It tracks client readiness and heartbeats around and during the chain-anchored
+window `[startTime, endTime]`, and issues an EIP-712 `CompletionAttestation`
+only for fully-clean sessions. It holds a signing key and **no transfer
+authority**; refusal is fail-closed throughout.
 
-Rule references below point at the frozen requirements baseline v1.4
-(`stakebeast-requirements-plan.md`, DAPP-1). The API contract freeze lives in
-DAPP-2 (`api-contract.md`) — endpoint shapes here are the pre-freeze working
-version and will be aligned to it.
+Stack: Node.js 20+ (developed on 16+), TypeScript, Express 4, Ethers v6.
 
-## Judgment rules implemented (baseline v1.4: section 4.1, decision D2)
+## Judgment rules (frozen)
 
-Server time is authoritative; the same event sequence always yields one result.
+- Assessed window = `[on-chain startTime, endTime]`; chain time is the authority
+  for the window bounds and for the "task has ended" signing gate.
+- Receive records are stored as (run-instance id, monotonic instant, server
+  UTC). Scoring compares server-UTC receive times directly against the chain
+  window — no recalibration from block data (trusted-server-clock assumption,
+  disclosed in PRD §9).
+- `visibility_hidden` with server UTC receive time inside the window ⇒
+  immediate, permanent violation. In-window heartbeat silence > 15 s ⇒
+  violation (including head gap from `startTime` and tail gap to `endTime`).
+  Recovery never clears a violation.
+- Bind backstop: a participant not bound by `startTime + 5 min` ⇒ never
+  attestable (fail-closed).
+- In-window silence spanning a service restart is platform-caused ⇒
+  `uncertifiable` (never a user violation, never remapped); compensation is
+  the admin `voidSession` path (spec §7).
+- Signing gate: sign only after a fresh on-chain block has
+  `timestamp ≥ endTime`; server UTC vs fresh chain time must be within ±30 s,
+  and stale chain data at signing ⇒ refuse as `unreliable_time`.
+- Final coverage check replays the entire window record before signing; once
+  judged, out-of-window heartbeats/events change nothing.
+- Idempotent re-serve of the stored signature; controlled re-signing under a
+  new key only after on-chain `setAttester` rotation, for non-terminal
+  in-window sessions whose judgment was clean (§6).
 
-- Clients heartbeat every 5s (informational cadence; judgment is gap-based).
-- A page-hidden event (`visibilitychange` → hidden) marks a violation **immediately**.
-- Without a hidden event, a heartbeat interruption of at most **15s** is
-  tolerated; beyond that the session is marked in violation, dated exactly at
-  `lastHeartbeatAt + 15s`.
-- Reconnecting **never** clears a marked violation.
-- Interruption reasons (refresh / close / network drop) are not distinguished.
-- Binding: the client must bind within **5 minutes after `startTime`** and never
-  after `endTime`; a late bind is refused permanently (fail-closed, AC-16).
-- A completion proof requires: bound + violation-free + `now >= endTime` +
-  not already issued — late binding can never shorten the declared duration.
+## Protocol (frontend ↔ attester, api-contract §B)
+
+```
+POST /v1/bind/challenge {chainId, contract, sessionId, address}
+  → {nonce, message, expiresAt}            # single-use, 5-minute challenge
+POST /v1/bind {chainId, contract, sessionId, address, nonce, bindSig}
+  → {clientToken, status, nextHeartbeatSeq}   # personal_sign over `message`;
+                                              # new bind revokes the old token
+POST /v1/arm {sessionId, txHash}           # Bearer; returns the ACTUAL state
+POST /v1/heartbeat {sessionId, seq, clientTs}   # Bearer; only strictly-increasing
+                                                # seq refreshes liveness (AC-30)
+POST /v1/event {sessionId, eventId, type, clientTs}  # Bearer; eventId dedup (AC-29)
+GET  /v1/sessions/:id/status?chainId=&contract=      # Bearer, participants only
+GET  /v1/sessions/:id/attestation?chainId=&contract= # 200 {typedData, signature}
+                                                     # 409 {state:"refused", reason}
+                                                     # 425 {state:"pending"}
+```
+
+Errors use `{error: {code, message}}` with codes `bad_request, unauthorized,
+not_found, too_late, refused, pending, challenge_expired, nonce_used, internal`.
+
+## Persistence (spec §5)
+
+`DATA_DIR` holds `journal.ndjson` (append-only, fsync per entry — the
+authoritative record, replayed on boot) and `state.json` (atomic snapshot for
+inspection). The journal records challenges, binds, token rotation, heartbeat
+watermarks (throttled 1/5 s per participant, plus a per-heartbeat seq marker so
+the anti-replay watermark survives restarts exactly), events, arming, the chain
+window, violations, anomalies, judgments, refusals and issued attestations.
+Deleting `DATA_DIR` factory-resets the service — never do this with live
+sessions.
 
 ## Quick start
 
 ```bash
+cd attester
+cp .env.example .env      # set ATTESTER_PRIVATE_KEY and CONTRACT_ADDRESS
 npm install
-cp .env.example .env   # fill in ATTESTER_PRIVATE_KEY when signing is enabled
-npm test               # build + run the unit/integration tests
-npm start              # build + start the service (default http://localhost:8787)
+npm test                  # unit + integration suite
+npm run dev               # http://localhost:3001, state in ./data
 ```
 
-Requires Node.js >= 16. No runtime dependencies (built-in `node:http`; judgment
-state persists to a write-through JSON file with atomic replace, recovered on
-restart — see `src/store.ts`).
+Local demo: run Hardhat with interval mining (e.g. `mining: { auto: true,
+interval: 5000 }`) so the signing gate always sees fresh blocks without needing
+a transaction. A well-known Hardhat account key is acceptable locally; Sepolia
+uses a dedicated key (the service sends no transactions — its balance is only
+a compromise tripwire).
 
 ## Configuration (environment only, never hard-coded)
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `PORT` | `8787` | HTTP listen port |
-| `ATTESTER_DB_PATH` | `./data/attester.json` | judgment-state persistence file |
-| `ATTESTER_PRIVATE_KEY` | — | 0x-prefixed key for EIP-712 signing (placeholder until DAPP-2) |
-| `CHAIN_ID` | `11155111` | chain the proofs are valid on (Sepolia) |
-
-## API (pre-freeze working shape; DAPP-2 is authoritative)
-
-| Method & path | Body | Description |
-| --- | --- | --- |
-| `GET /health` | — | liveness + signer readiness |
-| `POST /sessions` | `{ sessionId, participant, startTime, durationMs }` | register a started on-chain session |
-| `GET /sessions/:id` | — | current judgment state |
-| `POST /sessions/:id/bind` | `{ participant }` | bind the client (≤ startTime+5min, ≤ endTime) |
-| `POST /sessions/:id/heartbeat` | `{ participant }` | heartbeat |
-| `POST /sessions/:id/hidden` | `{ participant }` | page-hidden event → immediate violation |
-| `POST /sessions/:id/proof` | `{ participant }` | request completion proof (fail-closed; 501 until DAPP-2 fields land) |
+| `RPC_URL` | `http://127.0.0.1:8545` | JSON-RPC endpoint |
+| `CONTRACT_ADDRESS` | — (required) | deployed StakeBeast contract |
+| `ATTESTER_PRIVATE_KEY` | — (required) | 0x-prefixed EIP-712 signing key |
+| `PORT` | `3001` | HTTP listen port |
+| `DATA_DIR` | `./data` | durable state directory |
+| `CHAIN_ID` | auto-detect | optional safety check vs the RPC network |
+| `CORS_ORIGIN` | `*` | browser origin allowlist (local dev) |
 
 ## Layout
 
-- `src/judgment.ts` — pure, clock-injected judgment core (all D2 rules)
-- `src/store.ts` — durable session-state store (restart-safe)
-- `src/server.ts` — HTTP wiring + violation sweeper
-- `src/signer.ts` — EIP-712 signer seam (interface + config placeholder)
-- `src/config.ts` — environment configuration (`.env` supported)
-- `test/` — AC-12/AC-16 rule tests, boundary tests, persistence and HTTP tests
+- `src/chain.ts` — read-only chain access (ethers v6) + ABI fragment (frozen)
+- `src/store.ts` — journal + snapshot persistence, restart-safe state
+- `src/scoring.ts` — pure coverage scoring (15 s rule, hidden events, restarts)
+- `src/core.ts` — session lifecycle, bind/arm/heartbeat/event, judgment, gates
+- `src/signer.ts` — EIP-712 typed data (contract-design §4) + signing
+- `src/server.ts` — Express wiring, sweeper + chain watcher drivers
+- `test/` — bind, protocol, attestation, restart-recovery and HTTP suites
+  against an in-memory chain implementing the same `ChainClient` seam
 
-## Out of scope in this wave (per DAPP-7)
+## Out of scope (per DAPP-12)
 
-- EIP-712 domain/message finalization and actual signing — frozen in DAPP-2,
-  aligned with Forge (contracts). Tracked as `TODO(DAPP-2)` in `src/signer.ts`.
-- Social backend REST API (WP4 — owned by member A unless the circuit breaker
-  triggers).
-- On-chain registration verification and request authentication (DAPP-2).
-- Dual-client co-focus tracking (P2, WP10).
+Contract implementation (`StakeBeast.sol`) is Forge's (DAPP-3); the ABI here
+mirrors contract-design v4 exactly and any drift is resolved in the task
+comments. Social backend (WP4) belongs to member A. Co-focus dual tracking is
+implemented in the data model (two participant slots, joint cleanliness) but
+its end-to-end exercise is WP10 (P2).
