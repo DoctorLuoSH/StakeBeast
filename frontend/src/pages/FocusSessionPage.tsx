@@ -96,7 +96,13 @@ export function FocusSessionPage() {
                 Stay on this page. Hiding the tab or losing the heartbeat marks
                 a violation — the proof service will refuse to sign.
               </p>
-              {elapsed ? (
+              {/* A violated session can never receive a completion proof, so
+                  the submit-to-settle hint must not appear once a violation
+                  is flagged — even after the window ends (DAPP-29).
+                  TODO(M3): drive this settlement hint from the proof state
+                  confirmed by the attestation service instead of the local
+                  elapsed / violated inference. */}
+              {elapsed && !violated ? (
                 <p className="focus__done">
                   Session window complete — submit the attestation to settle
                   (contract call arrives with DAPP-4 wiring).
