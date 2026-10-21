@@ -74,6 +74,62 @@
   margin: 0;
 }
 
+/* Funds-pending status row (DAPP-23 review: failed state names the stake's fate). */
+.focus__failed .focus__funds {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0.6rem 0 0;
+  font-weight: 600;
+  color: var(--color-warning);
+}
+
+.focus__funds-dot {
+  width: 0.55em;
+  height: 0.55em;
+  border-radius: 50%;
+  background: var(--color-accent);
+  animation: focus-funds-pulse 1.6s ease-in-out infinite;
+}
+
+/* Settlement-window countdown: demoted to secondary info, purpose labelled
+   (DAPP-23 review — no longer competes with the "Session failed" title). */
+.focus__settlement {
+  margin-top: 0.9rem;
+  padding-top: 0.75rem;
+  border-top: 1px dashed var(--color-border);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.focus__settlement .countdown {
+  flex-direction: row;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.focus__settlement .countdown__value {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--color-ink-muted);
+}
+
+.focus__settlement p {
+  font-size: 0.85rem;
+}
+
+@keyframes focus-funds-pulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .focus__funds-dot {
+    animation: none;
+  }
+}
+
 /* Demo controls — de-emphasised placeholder until DAPP-4 wiring. */
 .focus__demo {
   font-size: 0.85rem;

@@ -17,6 +17,12 @@ import "./FocusSessionPage.css";
 /** Placeholder demo session length — baseline allows 2–3 min demo sessions. */
 const DEMO_DURATION_MS = 2 * 60 * 1000;
 
+/**
+ * Demo stand-in for the contract's GRACE_DURATION — on-chain the settlement
+ * window is `endTime + GRACE_DURATION` (StakeBeast.sol settlementDeadline).
+ */
+const DEMO_SETTLEMENT_GRACE_MS = 5 * 60 * 1000;
+
 function useNow(intervalMs: number) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -66,33 +72,37 @@ export function FocusSessionPage() {
       <div className="focus">
         <section className="card focus__stage">
           <BeastSprite stage="young" mood={mood} progress={progress} size={220} />
-          <CountdownTimer
-            targetMs={endMs}
-            label={elapsed ? "Session window ended" : "Remaining"}
-            onElapsed={() => setElapsed(true)}
-          />
-          <div
-            className="focus__progress"
-            role="progressbar"
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={Math.round(progress * 100)}
-            aria-label="Growth progress"
-          >
-            <span
-              className="focus__progress-fill"
-              style={{ width: `${progress * 100}%` }}
-            />
-          </div>
-          <p className="muted focus__hint">
-            Stay on this page. Hiding the tab or losing the heartbeat marks a
-            violation — the proof service will refuse to sign.
-          </p>
-          {elapsed && !fled ? (
-            <p className="focus__done">
-              Session window complete — submit the attestation to settle
-              (contract call arrives with DAPP-4 wiring).
-            </p>
+          {!fled ? (
+            <>
+              <CountdownTimer
+                targetMs={endMs}
+                label={elapsed ? "Session window ended" : "Remaining"}
+                onElapsed={() => setElapsed(true)}
+              />
+              <div
+                className="focus__progress"
+                role="progressbar"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={Math.round(progress * 100)}
+                aria-label="Growth progress"
+              >
+                <span
+                  className="focus__progress-fill"
+                  style={{ width: `${progress * 100}%` }}
+                />
+              </div>
+              <p className="muted focus__hint">
+                Stay on this page. Hiding the tab or losing the heartbeat marks
+                a violation — the proof service will refuse to sign.
+              </p>
+              {elapsed ? (
+                <p className="focus__done">
+                  Session window complete — submit the attestation to settle
+                  (contract call arrives with DAPP-4 wiring).
+                </p>
+              ) : null}
+            </>
           ) : null}
         </section>
 
@@ -100,20 +110,35 @@ export function FocusSessionPage() {
           <section className="card focus__warning" role="alert">
             <h3>Violation flagged</h3>
             <p>
-              Leaving the focus page breaks the session rules. A violation is
-              <strong> permanent</strong>: the proof service will not sign this
-              session, and the stake is forfeited along the preset route.
+              Violation recorded. This session can no longer receive a
+              completion proof. Admitting defeat uses your chosen payout
+              route; after the settlement deadline, anyone can trigger
+              forfeiture to charity.
             </p>
           </section>
         ) : null}
 
         {fled ? (
           <section className="card focus__failed" role="alert">
-            <h3>The beast ran away</h3>
+            <h3>Session failed</h3>
             <p>
-              Only a dried sprout remains. Failed sessions mint no NFT; the
-              stake moves along the forfeit route chosen at creation.
+              Only a dried sprout remains — the beast ran away. Failed
+              sessions mint no NFT.
             </p>
+            <p className="focus__funds">
+              <span className="focus__funds-dot" aria-hidden="true" />
+              Funds pending settlement
+            </p>
+            <div className="focus__settlement">
+              <CountdownTimer
+                targetMs={endMs + DEMO_SETTLEMENT_GRACE_MS}
+                label="On-chain settlement window"
+              />
+              <p className="muted">
+                Admit defeat to pay your chosen route; after the deadline
+                anyone can trigger forfeiture to charity.
+              </p>
+            </div>
           </section>
         ) : null}
 

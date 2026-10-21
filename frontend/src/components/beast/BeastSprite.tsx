@@ -171,8 +171,9 @@ interface FigureProps {
 
 function Figure({ stage, growth, mood }: FigureProps) {
   const adultLike = stage === "adult" || stage === "golden";
-  // Hatchlings are small and featureless; adults end up broader.
-  const scale = 0.62 + 0.38 * growth;
+  // Hatchlings are small and featureless; adults end up broader. Floor at
+  // 0.72 so a fresh hatchling stays legible on phone screens (DAPP-23).
+  const scale = 0.72 + 0.28 * growth;
   const scaleX = adultLike ? scale * 1.08 : scale;
   const figureStyle: CSSProperties = {
     transform: `translate(60px, 102px) scale(${scaleX}, ${scale}) translate(-60px, -102px)`,
@@ -271,7 +272,9 @@ function FledScene({ stage }: { stage: BeastStage }) {
         <circle cx="23" cy="101" r="2.2" />
       </g>
       <g className="beast-sprite__withered">
-        <g transform="translate(60 102) scale(1.25) translate(-60 -102)">
+        {/* Enlarged past the beast's own scale so the remnant stays
+            recognisable on phone screens (DAPP-23). */}
+        <g transform="translate(60 102) scale(1.7) translate(-60 -102)">
           <ellipse className="beast__dry-patch" cx="60" cy="101" rx="14" ry="3" />
           <path className="beast__wilt-stem" d="M60,101 C60,94 59,90 56,86" />
           <ellipse className="beast__wilt-leaf" cx="53" cy="87" rx="4.5" ry="2.2" transform="rotate(-40 53 87)" />

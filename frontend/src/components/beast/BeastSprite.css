@@ -80,17 +80,18 @@
   transform-origin: 100% 100%;
 }
 
-/* Fled scene */
+/* Fled scene — withered tones sit a notch above the card surface so the
+   remnant stays legible on phones (DAPP-23). */
 .beast-sprite__dust circle { fill: #b9ae97; opacity: 0; }
-.beast__dry-patch { fill: #5c5140; }
+.beast__dry-patch { fill: #6f6350; }
 .beast__wilt-stem {
   fill: none;
-  stroke: #8a7b5c;
+  stroke: #9d8d6e;
   stroke-width: 2.5;
   stroke-linecap: round;
 }
-.beast__wilt-leaf { fill: #8a7b5c; }
-.beast__wilt-leaf--dark { fill: #7a6c52; }
+.beast__wilt-leaf { fill: #9d8d6e; }
+.beast__wilt-leaf--dark { fill: #8f7f63; }
 
 /* Celebration / golden shimmer */
 .beast__spark { fill: var(--color-accent); }
