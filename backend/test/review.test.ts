@@ -1,5 +1,6 @@
 /**
- * A.3 verifier review list: SessionCreated event discovery into the mirror,
+ * A.3 verifier review list: SessionCreated / SessionJoined event discovery
+ * into the mirror (duel mirror positions arrive via SessionJoined.linkedId),
  * chain-refresh of session fields, verifier-only filtering on Active
  * sessions, embedded latest check-ins, and offset-cursor pagination.
  */
@@ -113,6 +114,58 @@ test('offset cursor paginates the review list', async (t) => {
 
   const badCursor = await api(f.base, 'GET', '/review/pending?cursor=abc', { token });
   assert.equal(badCursor.status, 400);
+});
+
+test('duel mirror position is discovered via SessionJoined: create, join, then both sides see the position they verify', async (t) => {
+  const f = await startFixture();
+  t.after(f.cleanup);
+  const a = Wallet.createRandom(); // duel creator
+  const b = Wallet.createRandom(); // duel joiner
+  const outsider = Wallet.createRandom();
+
+  // A creates duel position 1 (verified by B) — a SessionCreated event.
+  f.gateway.addSession(
+    '1',
+    makeSession({ mode: 2, staker: a.address, partner: b.address, verifier: b.address, status: 1 }),
+  );
+  f.gateway.emitCreated('1');
+
+  const { token: tokenA } = await login(f.base, a);
+  const { token: tokenB } = await login(f.base, b);
+  const { token: tokenOutsider } = await login(f.base, outsider);
+
+  // Before B joins, only B's review list shows A's position.
+  assert.deepEqual(
+    (await api(f.base, 'GET', '/review/pending', { token: tokenA })).json.map((i: any) => i.sessionId),
+    [],
+  );
+  assert.deepEqual(
+    (await api(f.base, 'GET', '/review/pending', { token: tokenB })).json.map((i: any) => i.sessionId),
+    ['1'],
+  );
+
+  // B joins in a later block: the contract creates mirror position 2 (staker
+  // B, verified by A) and emits SessionJoined(1, B, stake, 2) plus two
+  // SessionStarted — but NO SessionCreated for the mirror.
+  f.gateway.block = 1001;
+  f.gateway.addSession(
+    '2',
+    makeSession({ mode: 2, staker: b.address, partner: a.address, verifier: a.address, linkedSessionId: '1', status: 1 }),
+  );
+  f.gateway.emitJoined('1', '2');
+
+  // A now sees B's mirror position; B still sees A's position; outsiders see nothing.
+  const listA = await api(f.base, 'GET', '/review/pending', { token: tokenA });
+  assert.deepEqual(
+    listA.json.map((i: any) => i.sessionId),
+    ['2'],
+  );
+  assert.equal(listA.json[0].staker, b.address);
+  assert.deepEqual(
+    (await api(f.base, 'GET', '/review/pending', { token: tokenB })).json.map((i: any) => i.sessionId),
+    ['1'],
+  );
+  assert.deepEqual((await api(f.base, 'GET', '/review/pending', { token: tokenOutsider })).json, []);
 });
 
 test('review/pending requires auth', async (t) => {

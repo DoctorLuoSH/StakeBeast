@@ -7,6 +7,7 @@ import type {
   ChainReceipt,
   ChainSession,
   SessionCreatedEvent,
+  SessionJoinedEvent,
 } from './gateway';
 
 export class EthersChainGateway implements ChainGateway {
@@ -52,6 +53,15 @@ export class EthersChainGateway implements ChainGateway {
     const logs = await this.contract.queryFilter('SessionCreated', fromBlock, toBlock);
     return logs.map((l) => ({
       sessionId: (l as EventLog).args[0].toString(),
+      blockNumber: l.blockNumber,
+    }));
+  }
+
+  async getSessionJoinedEvents(fromBlock: number, toBlock: number): Promise<SessionJoinedEvent[]> {
+    const logs = await this.contract.queryFilter('SessionJoined', fromBlock, toBlock);
+    return logs.map((l) => ({
+      sessionId: (l as EventLog).args[0].toString(),
+      linkedSessionId: (l as EventLog).args[3].toString(),
       blockNumber: l.blockNumber,
     }));
   }

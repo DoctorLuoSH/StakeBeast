@@ -181,8 +181,11 @@ export function checkinRoutes(ctx: Ctx): Router {
       }
       const receipt = await ctx.gateway.getTransactionReceipt(txHash);
       if (!receipt) {
-        // No receipt yet — stays pending, nothing persisted.
-        res.json({ ok: false, onchain: { status: 'pending', txHash: null, blockNumber: null } });
+        // No receipt yet: persist the reported hash as the current pending
+        // attempt, superseding any older one, so POST and GET agree. The
+        // client re-POSTs the same hash once it mines to settle the anchor.
+        ctx.db.updateAnchor(row.checkin_id, 'pending', txHash, null);
+        res.json({ ok: false, onchain: { status: 'pending', txHash, blockNumber: null } });
         return;
       }
       const matched =

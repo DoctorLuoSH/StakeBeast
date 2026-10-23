@@ -143,10 +143,11 @@ test('anchor stays pending without a receipt, then confirms once mined', async (
   assert.equal(pending.status, 200);
   assert.deepEqual(pending.json, {
     ok: false,
-    onchain: { status: 'pending', txHash: null, blockNumber: null },
+    onchain: { status: 'pending', txHash: TX, blockNumber: null },
   });
+  // The reported hash is persisted as the current pending attempt: POST and GET agree.
   const list1 = await api(f.base, 'GET', '/sessions/1/checkins', { token });
-  assert.equal(list1.json[0].onchain.status, 'pending');
+  assert.deepEqual(list1.json[0].onchain, { status: 'pending', txHash: TX, blockNumber: null });
 
   f.gateway.setCheckedInReceipt(TX, {
     sessionId: '1',
@@ -157,6 +158,48 @@ test('anchor stays pending without a receipt, then confirms once mined', async (
   const confirmed = await anchor(f.base, token, checkinId, TX);
   assert.equal(confirmed.json.ok, true);
   assert.equal(confirmed.json.onchain.status, 'confirmed');
+});
+
+test('a failed anchor superseded by an unmined retry reads pending, then settles when mined', async (t) => {
+  const { f, staker, token, evidenceHash, checkinId } = await fixtureWithCheckin(t);
+  const TX1 = `0x${'ab'.repeat(32)}`;
+  const TX2 = `0x${'ef'.repeat(32)}`;
+
+  // First attempt reverted on chain → failed is persisted.
+  f.gateway.setCheckedInReceipt(TX1, {
+    sessionId: '1',
+    staker: staker.address,
+    evidenceHash,
+    periodIndex: 2,
+    status: 0,
+  });
+  const failed = await anchor(f.base, token, checkinId, TX1);
+  assert.equal(failed.json.onchain.status, 'failed');
+  const list0 = await api(f.base, 'GET', '/sessions/1/checkins', { token });
+  assert.deepEqual(list0.json[0].onchain, { status: 'failed', txHash: TX1, blockNumber: '1500' });
+
+  // Retry with a new, not-yet-mined transaction: POST returns pending and the
+  // list must agree — not show the old attempt's failed state.
+  const pending = await anchor(f.base, token, checkinId, TX2);
+  assert.deepEqual(pending.json, {
+    ok: false,
+    onchain: { status: 'pending', txHash: TX2, blockNumber: null },
+  });
+  const list1 = await api(f.base, 'GET', '/sessions/1/checkins', { token });
+  assert.deepEqual(list1.json[0].onchain, { status: 'pending', txHash: TX2, blockNumber: null });
+
+  // Once the replacement mines, re-reporting the same hash settles the anchor.
+  f.gateway.setCheckedInReceipt(TX2, {
+    sessionId: '1',
+    staker: staker.address,
+    evidenceHash,
+    periodIndex: 2,
+    blockNumber: 1501,
+  });
+  const confirmed = await anchor(f.base, token, checkinId, TX2);
+  assert.equal(confirmed.json.ok, true);
+  const list2 = await api(f.base, 'GET', '/sessions/1/checkins', { token });
+  assert.deepEqual(list2.json[0].onchain, { status: 'confirmed', txHash: TX2, blockNumber: '1501' });
 });
 
 test('anchor is staker-only; unknown check-in is 404; malformed txHash is 400', async (t) => {

@@ -11,6 +11,7 @@ import type {
   ChainReceipt,
   ChainSession,
   SessionCreatedEvent,
+  SessionJoinedEvent,
 } from '../src/chain/gateway';
 
 export const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
@@ -37,6 +38,7 @@ export class FakeChainGateway implements ChainGateway {
   readonly sessions = new Map<string, ChainSession>();
   readonly receipts = new Map<string, ChainReceipt>();
   readonly created: SessionCreatedEvent[] = [];
+  readonly joined: SessionJoinedEvent[] = [];
   block = 1000;
 
   addSession(sessionId: string, session: ChainSession): void {
@@ -45,6 +47,11 @@ export class FakeChainGateway implements ChainGateway {
 
   emitCreated(sessionId: string, blockNumber?: number): void {
     this.created.push({ sessionId, blockNumber: blockNumber ?? this.block });
+  }
+
+  /** Mirrors the contract: a Duel join emits SessionJoined(id, participant, stake, linkedId). */
+  emitJoined(sessionId: string, linkedSessionId: string, blockNumber?: number): void {
+    this.joined.push({ sessionId, linkedSessionId, blockNumber: blockNumber ?? this.block });
   }
 
   setReceipt(txHash: string, receipt: ChainReceipt): void {
@@ -96,5 +103,9 @@ export class FakeChainGateway implements ChainGateway {
 
   async getSessionCreatedEvents(fromBlock: number, toBlock: number): Promise<SessionCreatedEvent[]> {
     return this.created.filter((e) => e.blockNumber >= fromBlock && e.blockNumber <= toBlock);
+  }
+
+  async getSessionJoinedEvents(fromBlock: number, toBlock: number): Promise<SessionJoinedEvent[]> {
+    return this.joined.filter((e) => e.blockNumber >= fromBlock && e.blockNumber <= toBlock);
   }
 }

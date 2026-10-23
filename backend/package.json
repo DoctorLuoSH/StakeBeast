@@ -5,7 +5,7 @@
   "description": "StakeBeast social backend (api-contract v4.1 section A): wallet-signature login, profiles, habit check-in evidence storage with on-chain anchor verification, and the verifier review list.",
   "license": "UNLICENSED",
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

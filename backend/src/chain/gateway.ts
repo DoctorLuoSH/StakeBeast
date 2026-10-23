@@ -40,6 +40,17 @@ export interface SessionCreatedEvent {
   blockNumber: number;
 }
 
+export interface SessionJoinedEvent {
+  /** Decimal string id of the session that was joined. */
+  sessionId: string;
+  /**
+   * Decimal string id of the mirror position a Duel join creates; '0' for a
+   * CoFocus join, which creates no linked position.
+   */
+  linkedSessionId: string;
+  blockNumber: number;
+}
+
 export interface ChainGateway {
   getSession(sessionId: string): Promise<ChainSession>;
   /** null while the transaction is not (yet) mined. */
@@ -47,4 +58,6 @@ export interface ChainGateway {
   getBlockNumber(): Promise<number>;
   /** SessionCreated events with blockNumber in [fromBlock, toBlock]. */
   getSessionCreatedEvents(fromBlock: number, toBlock: number): Promise<SessionCreatedEvent[]>;
+  /** SessionJoined events with blockNumber in [fromBlock, toBlock]. */
+  getSessionJoinedEvents(fromBlock: number, toBlock: number): Promise<SessionJoinedEvent[]>;
 }
