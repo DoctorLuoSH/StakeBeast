@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" fill="none" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="beanie hat">
+  <g class="beast__hat beast__hat-beanie">
+    <g class="beast__hat-pompom" fill="#B8C4D0" stroke="#657888">
+      <path d="M60 5Q64 4 65 8Q69 9 66 12Q65 16 61 14Q57 17 55 13Q51 12 54 9Q54 5 58 6Z"/>
+    </g>
+    <g class="beast__hat-crown" fill="#E8EDF2" stroke="#657888">
+      <path d="M39 28C39 18 48 12 60 12C72 12 81 18 81 28Z"/>
+    </g>
+    <g class="beast__hat-knit" stroke="#B8C4D0">
+      <path d="M49 18Q46 22 46 27M60 16V27M71 18Q74 22 74 27"/>
+    </g>
+    <g class="beast__hat-band" fill="#B8C4D0" stroke="#657888">
+      <path d="M38 26Q60 24 82 26L82 33Q60 35 38 33Z"/>
+      <path d="M44 28V32M52 27V33M60 27V33M68 27V33M76 28V32"/>
+    </g>
+  </g>
+</svg>
