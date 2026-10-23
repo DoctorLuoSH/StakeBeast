@@ -1,0 +1,3 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" fill="none" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="fx spark">
+<g class="beast-sprite__sparkles" ><path d="M22 25L23.8 29.2L28 31L23.8 32.8L22 37L20.2 32.8L16 31L20.2 29.2Z" fill="var(--beast-belly, #C9F2A4)" class="beast__spark"/><path d="M98 35L99.8 38.2L103 40L99.8 41.8L98 45L96.2 41.8L93 40L96.2 38.2Z" fill="var(--beast-belly, #C9F2A4)" class="beast__spark"/><path d="M87 13L88.8 15.2L91 17L88.8 18.8L87 21L85.2 18.8L83 17L85.2 15.2Z" fill="var(--beast-belly, #C9F2A4)" class="beast__spark"/></g>
+</svg>
