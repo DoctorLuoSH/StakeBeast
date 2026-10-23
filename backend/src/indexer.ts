@@ -35,9 +35,29 @@ export class SessionIndexer {
     const from = last == null ? this.opts.startBlock : last + 1;
     const latest = await this.gateway.getBlockNumber();
     if (latest < from) return;
+    await this.scanRange(from, latest);
+    this.db.setLastScannedBlock(latest);
+  }
+
+  /**
+   * One-time historical rescan of [fromBlock, watermark] for discovery events
+   * the scanner missed (e.g. Duel mirror positions whose SessionJoined predates
+   * this scanner on an existing database). Discovery inserts are idempotent and
+   * the persisted watermark is never moved, so business data is untouched.
+   * Returns the number of events scanned per type.
+   */
+  async backfill(fromBlock: number): Promise<{ created: number; joined: number }> {
+    const watermark = this.db.getLastScannedBlock();
+    const to = watermark ?? (await this.gateway.getBlockNumber());
+    if (to < fromBlock) return { created: 0, joined: 0 };
+    return this.scanRange(fromBlock, to);
+  }
+
+  /** Insert every session id discovered in [from, to] (inclusive). */
+  private async scanRange(from: number, to: number): Promise<{ created: number; joined: number }> {
     const [created, joined] = await Promise.all([
-      this.gateway.getSessionCreatedEvents(from, latest),
-      this.gateway.getSessionJoinedEvents(from, latest),
+      this.gateway.getSessionCreatedEvents(from, to),
+      this.gateway.getSessionJoinedEvents(from, to),
     ]);
     for (const e of created) this.db.mirrorInsertDiscovered(e.sessionId);
     for (const e of joined) {
@@ -45,7 +65,7 @@ export class SessionIndexer {
       // Duel joins create the linked mirror position without SessionCreated.
       if (e.linkedSessionId !== '0') this.db.mirrorInsertDiscovered(e.linkedSessionId);
     }
-    this.db.setLastScannedBlock(latest);
+    return { created: created.length, joined: joined.length };
   }
 
   /** Refresh mirrored rows whose getSession snapshot is older than ttlMs. */

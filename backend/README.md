@@ -12,7 +12,17 @@ cp .env.example .env   # then edit values
 npm run dev            # build + boot on http://localhost:4000/api
 ```
 
-The server boots with sensible local-dev defaults; only `JWT_SECRET` is mandatory (the server refuses to start without it). Requires Node.js ≥ 22: the `npm test` glob is expanded by Node's own test runner, so the command works unchanged in any shell. Other scripts: `npm run build` (tsc), `npm test` (build + `node --test`), `npm start`.
+The server boots with sensible local-dev defaults; only `JWT_SECRET` is mandatory (the server refuses to start without it). Requires Node.js ≥ 22: the `npm test` glob is expanded by Node's own test runner, so the command works unchanged in any shell. Other scripts: `npm run build` (tsc), `npm test` (build + `node --test`), `npm start`, `npm run backfill` (see below).
+
+## Upgrading an existing deployment: one-time backfill
+
+Session discovery scans forward from a persisted block watermark, so an existing database never re-reads history. When a deploy adds discovery of a new event type (e.g. `SessionJoined` for duel mirror positions), joins that happened before the upgrade stay undiscovered. Run a one-time backfill over the missed window — inserts are idempotent and the watermark never moves, so all business data (profiles, check-ins, media) is preserved:
+
+```bash
+npm run backfill -- --from <first block of the missed window>
+```
+
+A fresh `DATA_DIR` needs no backfill — the normal scan covers everything from `INDEXER_START_BLOCK`.
 
 ## Environment variables
 
@@ -40,7 +50,8 @@ src/
   checkins.ts          A.3 check-ins, anchor verification, media
   review.ts            A.3 verifier review list
   parties.ts           party resolution from chain state (<= 60 s cache)
-  indexer.ts           lazy SessionCreated/SessionJoined scanner + mirror refresher
+  indexer.ts           lazy SessionCreated/SessionJoined scanner + mirror refresher + backfill
+  backfill.ts          one-time historical discovery backfill entry point
   avatars.ts           placeholder generation + upload re-encode
   chain/gateway.ts     ChainGateway interface (all chain reads)
   chain/ethersGateway.ts  production gateway
@@ -75,4 +86,4 @@ The uploaded photo's original bytes are stored byte-identical at `DATA_DIR/media
 
 ## Tests
 
-`npm test` builds and runs `node --test` over six suites (47 tests) against the real Express app on ephemeral ports: real wallet signatures for login, a real SQLite database in temp dirs, and an injected in-memory `ChainGateway` fake that encodes `CheckedIn` logs with the real ABI coder. Covered: the full auth matrix (incl. nonce consumption on failed verifies and the 100 req/min rate limit), profile provisioning/validation/avatar re-encode, byte-identical evidence storage and hash verification, all anchor outcomes (confirmed / failed × reverted/wrong-contract/hash-mismatch/period-mismatch / pending / failed-then-unmined-retry supersession), party authorization incl. duel linked stakers, media round-trip and thumbnail bounds, review discovery incl. duel mirror positions via `SessionJoined.linkedId`, pagination, CORS, and the error envelope.
+`npm test` builds and runs `node --test` over six suites (48 tests) against the real Express app on ephemeral ports: real wallet signatures for login, a real SQLite database in temp dirs, and an injected in-memory `ChainGateway` fake that encodes `CheckedIn` logs with the real ABI coder. Covered: the full auth matrix (incl. nonce consumption on failed verifies and the 100 req/min rate limit), profile provisioning/validation/avatar re-encode, byte-identical evidence storage and hash verification, all anchor outcomes (confirmed / failed × reverted/wrong-contract/hash-mismatch/period-mismatch / pending / failed-then-unmined-retry supersession), party authorization incl. duel linked stakers, media round-trip and thumbnail bounds, review discovery incl. duel mirror positions via `SessionJoined.linkedId` and the one-time historical backfill for pre-upgrade databases, pagination, CORS, and the error envelope.

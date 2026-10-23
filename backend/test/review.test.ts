@@ -10,6 +10,7 @@ import assert from 'node:assert/strict';
 import { Wallet } from 'ethers';
 import { api, login, makeImage, photoForm, sha256Hex, startFixture } from './helpers';
 import { makeSession } from './fakeGateway';
+import { SessionIndexer } from '../src/indexer';
 
 test('review/pending lists only Active sessions the caller verifies, with profile, params, and latest check-ins', async (t) => {
   const f = await startFixture();
@@ -123,10 +124,12 @@ test('duel mirror position is discovered via SessionJoined: create, join, then b
   const b = Wallet.createRandom(); // duel joiner
   const outsider = Wallet.createRandom();
 
-  // A creates duel position 1 (verified by B) — a SessionCreated event.
+  // A creates duel position 1 (verified by B) — a SessionCreated event. The
+  // position stays Pending until B joins, and the review list only shows
+  // Active positions, so neither side sees anything yet.
   f.gateway.addSession(
     '1',
-    makeSession({ mode: 2, staker: a.address, partner: b.address, verifier: b.address, status: 1 }),
+    makeSession({ mode: 2, staker: a.address, partner: b.address, verifier: b.address, status: 0 }),
   );
   f.gateway.emitCreated('1');
 
@@ -134,27 +137,31 @@ test('duel mirror position is discovered via SessionJoined: create, join, then b
   const { token: tokenB } = await login(f.base, b);
   const { token: tokenOutsider } = await login(f.base, outsider);
 
-  // Before B joins, only B's review list shows A's position.
   assert.deepEqual(
-    (await api(f.base, 'GET', '/review/pending', { token: tokenA })).json.map((i: any) => i.sessionId),
+    (await api(f.base, 'GET', '/review/pending', { token: tokenA })).json,
     [],
   );
   assert.deepEqual(
-    (await api(f.base, 'GET', '/review/pending', { token: tokenB })).json.map((i: any) => i.sessionId),
-    ['1'],
+    (await api(f.base, 'GET', '/review/pending', { token: tokenB })).json,
+    [],
   );
 
-  // B joins in a later block: the contract creates mirror position 2 (staker
-  // B, verified by A) and emits SessionJoined(1, B, stake, 2) plus two
-  // SessionStarted — but NO SessionCreated for the mirror.
+  // B joins in a later block: the contract activates A's position and creates
+  // B's Active mirror position 2 (verified by A), emitting
+  // SessionJoined(1, B, stake, 2) plus two SessionStarted — but NO
+  // SessionCreated for the mirror.
   f.gateway.block = 1001;
+  f.gateway.addSession(
+    '1',
+    makeSession({ mode: 2, staker: a.address, partner: b.address, verifier: b.address, linkedSessionId: '2', status: 1 }),
+  );
   f.gateway.addSession(
     '2',
     makeSession({ mode: 2, staker: b.address, partner: a.address, verifier: a.address, linkedSessionId: '1', status: 1 }),
   );
   f.gateway.emitJoined('1', '2');
 
-  // A now sees B's mirror position; B still sees A's position; outsiders see nothing.
+  // A now sees B's mirror position; B sees A's position; outsiders see nothing.
   const listA = await api(f.base, 'GET', '/review/pending', { token: tokenA });
   assert.deepEqual(
     listA.json.map((i: any) => i.sessionId),
@@ -166,6 +173,53 @@ test('duel mirror position is discovered via SessionJoined: create, join, then b
     ['1'],
   );
   assert.deepEqual((await api(f.base, 'GET', '/review/pending', { token: tokenOutsider })).json, []);
+});
+
+test('one-time backfill discovers a duel mirror position that predates the scan watermark', async (t) => {
+  const f = await startFixture();
+  t.after(f.cleanup);
+  const a = Wallet.createRandom(); // duel creator
+  const b = Wallet.createRandom(); // duel joiner
+
+  // Legacy database: the persisted watermark (1000) is already past the duel
+  // join at block 950, which created mirror position 2 with no SessionCreated
+  // event. Position 1 was mirrored by the old scanner back then. The
+  // forward-only scanner never re-reads history, so A's list stays empty.
+  f.gateway.addSession(
+    '1',
+    makeSession({ mode: 2, staker: a.address, partner: b.address, verifier: b.address, linkedSessionId: '2', status: 1 }),
+  );
+  f.gateway.addSession(
+    '2',
+    makeSession({ mode: 2, staker: b.address, partner: a.address, verifier: a.address, linkedSessionId: '1', status: 1 }),
+  );
+  f.gateway.emitCreated('1', 900);
+  f.gateway.emitJoined('1', '2', 950);
+  f.db.mirrorInsertDiscovered('1'); // discovered by the pre-upgrade scanner
+  f.db.setLastScannedBlock(1000);
+
+  const { token: tokenA } = await login(f.base, a);
+  const { token: tokenB } = await login(f.base, b);
+  assert.deepEqual(
+    (await api(f.base, 'GET', '/review/pending', { token: tokenA })).json,
+    [],
+    'forward-only scan never re-reads history',
+  );
+
+  // One-time backfill over the missed window discovers the mirror position;
+  // the watermark and all business data are untouched.
+  const indexer = new SessionIndexer(f.db, f.gateway, { startBlock: 0, throttleMs: 0 });
+  await indexer.backfill(900);
+  assert.equal(f.db.getLastScannedBlock(), 1000, 'backfill never moves the watermark');
+
+  assert.deepEqual(
+    (await api(f.base, 'GET', '/review/pending', { token: tokenA })).json.map((i: any) => i.sessionId),
+    ['2'],
+  );
+  assert.deepEqual(
+    (await api(f.base, 'GET', '/review/pending', { token: tokenB })).json.map((i: any) => i.sessionId),
+    ['1'],
+  );
 });
 
 test('review/pending requires auth', async (t) => {
