@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" fill="none" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="fedora hat">
+  <g class="beast__hat beast__hat-fedora">
+    <g class="beast__hat-crown" fill="#6B5542" stroke="#AA9074">
+      <path d="M43.85 47.75L45.55 35Q48.95 31.6 55.75 35L62.55 35.85Q67.65 31.6 73.6 33.3L77.85 46.05Z"/>
+    </g>
+    <g class="beast__hat-band" fill="#B78358" stroke="#AA9074">
+      <path d="M44.7 43.5L76.15 41.8L77.85 46.9L43.85 48.6Z"/>
+    </g>
+    <g class="beast__hat-brim" fill="#6B5542" stroke="#AA9074">
+      <path d="M33.65 48.6Q60 45.2 87.2 46.9Q90.6 49.45 82.95 50.3Q72.75 52 63.4 52L56.6 52Q46.4 52 40.45 51.15Q31.95 52 33.65 48.6Z"/>
+    </g>
+  </g>
+</svg>
