@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" fill="none" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="leaf hat">
+  <g class="beast__hat beast__hat-leaf">
+    <g class="beast__hat-stem" stroke="#3E7E28">
+      <path d="M 59 32 Q 56 27 59 23 Q 62 22 63 25 L 63 32 Z" fill="#58A83C"/>
+    </g>
+    <g class="beast__hat-brim" fill="#58A83C" stroke="#3E7E28">
+      <path d="M 60 29 C 47 28 35 33 26 39 Q 28 43 36 41 Q 42 45 49 42 Q 56 45 63 42 Q 70 45 77 41 Q 86 44 94 39 C 83 33 72 29 60 29 Z"/>
+    </g>
+    <g class="beast__hat-veins" stroke="#3E7E28">
+      <path d="M 60 32 L 38 39 M 60 32 L 51 40 M 60 32 L 65 40 M 60 32 L 81 39"/>
+    </g>
+  </g>
+</svg>
