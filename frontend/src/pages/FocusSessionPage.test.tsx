@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * FocusSessionPage settlement-hint tests (DAPP-26 review fix): the
+ * FocusSessionPage settlement-hint tests (DAPP-29 review fix): the
  * "submit the attestation to settle" hint is gated on `elapsed && !violated`.
  * A session violated first and then run to the window end must show only the
  * violation / settlement-route notice — never the submit-to-settle entry.
