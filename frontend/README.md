@@ -23,7 +23,7 @@ npm run dev            # http://localhost:5173
 ```
 
 Other scripts: `npm run build` (type-check + production build),
-`npm run preview`, `npm run lint`.
+`npm run preview`, `npm run lint`, `npm test` (vitest component tests).
 
 ## Environment variables
 
@@ -38,6 +38,7 @@ prefix — the repository carries **zero hardcoded addresses**. See
 | `VITE_PROOF_SERVICE_URL` | Machine-attestation service (WP3) |
 | `VITE_API_BASE_URL` | Social backend REST API (P1, WP4) |
 | `VITE_SEPOLIA_RPC_URL` | Optional RPC used when adding Sepolia to a wallet |
+| `VITE_DEMO_MODE` | `true` enables the zoo sample shelf in built bundles (dev server always counts as demo mode) |
 
 ## Wallet flow
 
@@ -61,7 +62,8 @@ src/
 │   ├── wallet/      # ConnectButton, WalletGate (guards pages by wallet state)
 │   ├── states/      # NoMetaMask, WrongNetwork, EmptyState screens
 │   ├── tx/          # TxStatusBanner (pending/success/failure + Etherscan link)
-│   ├── beast/       # BeastSprite — reserved interface for teammate B's original art
+│   ├── beast/       # BeastSprite (SVG growth/flee animation pipeline), BeastCard,
+│   │                # ZooShelf (real mints / demo samples / empty state — mutually exclusive)
 │   └── CountdownTimer.tsx
 └── pages/           # Home, CreateSession (4 modes), FocusSession, Settlement,
                      # Review (supervisor), Profile/My Zoo, NotFound
@@ -77,9 +79,14 @@ disabled and labelled accordingly.
 ## Conventions
 
 - UI copy, code, comments and docs are in English.
-- Colors/spacing come from the design tokens in `src/index.css`
-  (original "calm nature" palette); no hardcoded values in components.
+- Colors/spacing come from the design tokens in `src/index.css` — the frozen
+  PRD v4.1 §14.5 "dark night-forest" palette (beast lime accent; gold
+  reserved for the Golden tier; red reserved for forfeit/violation). No
+  hardcoded values in components.
 - All artwork is original. `BeastSprite` (`stage` / `tier` / `mood` /
-  `progress` props) is the seam where teammate B's sprites and the
-  growth/flee animations will land.
+  `progress` props) renders the blob-beast as inline SVG with a CSS keyframe
+  animation pipeline (PRD §14.2/§14.3): five growth phases (egg → cracked →
+  hatchling → near-final → final), four tier silhouettes, and mood overlays
+  (growing / happy / warning / fled → withered / minted). Teammate B's final
+  original sprites swap in behind the same props.
 - Responsive by default, including narrow injected-wallet mobile browsers.

@@ -1,13 +1,13 @@
 /**
- * ProfilePage — personal record + "My Zoo" NFT gallery (baseline §4.7).
- * Record stats (success/fail counts, total focus time, total forfeited) and
- * the beast shelf are skeletons until contract reads are wired; statistic
- * charts are P1 and intentionally absent.
+ * ProfilePage — personal record + "My Zoo" NFT gallery (baseline §4.7,
+ * PRD §14.5). Record stats stay skeletons until contract reads land; the
+ * zoo shelf (ZooShelf) renders exactly one view per state: real minted
+ * beasts, the demo-mode sample shelf, or the egg empty state.
  */
 
 import { WalletGate } from "../components/wallet/WalletGate";
-import { BeastSprite } from "../components/beast/BeastSprite";
-import { EmptyState } from "../components/states/EmptyState";
+import { ZooShelf } from "../components/beast/ZooShelf";
+import type { BeastEntry } from "../components/beast/zooView";
 import "./ProfilePage.css";
 
 const STAT_SLOTS = [
@@ -16,6 +16,16 @@ const STAT_SLOTS = [
   { label: "Total focus time", value: "—" },
   { label: "Total forfeited", value: "—" },
 ];
+
+/**
+ * Real minted beasts load with contract reads (DAPP-4); empty until then.
+ * The shelf view (real cards / demo samples / empty state) is decided inside
+ * ZooShelf so samples and the empty state can never render together.
+ */
+const MINTED_BEASTS: BeastEntry[] = [];
+
+/** Sample shelf is a dev/demo aid only (dev server or VITE_DEMO_MODE=true). */
+const DEMO_MODE = import.meta.env.DEV || import.meta.env.VITE_DEMO_MODE === "true";
 
 export function ProfilePage() {
   return (
@@ -38,16 +48,7 @@ export function ProfilePage() {
             Untransferable beasts minted from completed sessions — tiered by
             declared duration (focus) or period days (habit).
           </p>
-          <div className="profile__zoo">
-            {/* Placeholder pair demonstrating the shelf layout. */}
-            <BeastSprite stage="sprout" mood="minted" progress={1} size={110} />
-            <BeastSprite stage="young" mood="minted" progress={1} size={110} />
-          </div>
-          <EmptyState
-            icon="🥚"
-            title="No beasts yet"
-            hint="Complete a session to mint your first beast into the zoo."
-          />
+          <ZooShelf beasts={MINTED_BEASTS} demoMode={DEMO_MODE} />
         </section>
       </div>
     </WalletGate>

@@ -1,0 +1,64 @@
+/* BeastCard — zoo shelf card + tier badges (PRD §14.5). */
+
+.beast-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 1rem 0.9rem 0.9rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-m);
+  box-shadow: var(--shadow-card);
+  text-align: center;
+}
+
+.beast-card--golden {
+  border-color: var(--color-gold);
+  box-shadow: 0 0 0 1px var(--color-gold), var(--shadow-card);
+}
+
+.beast-card__stage {
+  line-height: 0;
+  margin-bottom: 0.25rem;
+}
+
+.beast-card__metric {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.beast-card__date {
+  font-size: 0.78rem;
+}
+
+/* Tier badges — gold reserved for the Golden tier (§14.5). */
+.tier-badge {
+  display: inline-block;
+  border-radius: var(--radius-pill);
+  padding: 0.12em 0.75em;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.tier-badge--seedling {
+  background: var(--color-primary-soft);
+  color: var(--color-primary-deep);
+}
+
+.tier-badge--young {
+  background: var(--color-success-soft);
+  color: var(--color-primary);
+}
+
+.tier-badge--adult {
+  background: var(--color-primary);
+  color: #0e1420;
+}
+
+.tier-badge--golden {
+  background: var(--color-gold);
+  color: #3a2c05;
+}
