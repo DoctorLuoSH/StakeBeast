@@ -19,7 +19,6 @@ import {
   BIND_WINDOW_MS,
   CHALLENGE_TTL_MS,
   CLOCK_SKEW_TOLERANCE_MS,
-  HB_WATERMARK_JOURNAL_MS,
   HEARTBEAT_GRACE_MS,
   sessionKey,
   type AnomalyReason,
@@ -295,12 +294,14 @@ export class AttesterCore {
     const key = auth.session.key;
 
     if (seq > p.highestSeq) {
-      // Accepted: journal the anti-replay marker every time (AC-30 survives
-      // restarts exactly) and the coverage watermark at most once per 5 s (§5).
+      // Accepted: journal the anti-replay marker (AC-30 survives restarts
+      // exactly) AND the coverage record. Every accepted heartbeat is
+      // journaled — gap analysis replays exactly this sequence, so a
+      // throttled journal would drop valid coverage and false-flag timeouts
+      // (DAPP-20 D1: judgment always sees the complete receive sequence,
+      // live and after replay).
       this.store.record({ t: 'seq', key, participant: p.address, seq });
-      if (now - p.lastHbWatermarkMs >= HB_WATERMARK_JOURNAL_MS || p.heartbeats.length === 0) {
-        this.store.record({ t: 'hb', key, participant: p.address, seq, rec });
-      }
+      this.store.record({ t: 'hb', key, participant: p.address, seq, rec });
     } else {
       this.store.record({ t: 'hbd', key, participant: p.address, seq, rec });
     }

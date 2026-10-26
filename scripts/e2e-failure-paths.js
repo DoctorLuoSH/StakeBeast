@@ -295,7 +295,11 @@ async function main() {
     await heartbeat(f2, f2Seq++, f2Token);
     await sleep(HB_CADENCE_MS);
   }
-  await sleep(10_000); // 10 s refresh-recovery gap: inside the 15 s tolerance
+  // The loop's trailing HB_CADENCE_MS sleep already contributes 5 s of the
+  // gap, so 5 s more lands the next beat at a true 10 s silence (margin ~5 s
+  // under the 15 s tolerance). Sleeping 10 s here instead made the real gap
+  // ~15.1 s — a genuine violation the post-DAPP-20 scorer flags synchronously.
+  await sleep(5_000); // 10 s refresh-recovery gap: inside the 15 s tolerance
   const after10 = await heartbeat(f2, f2Seq++, f2Token);
   check("B-10", "10 s refresh-recovery gap is not a violation (AC-12)",
     "200 {ok:true,violation:false}", `${after10.status} ${JSON.stringify(after10.body)}`,

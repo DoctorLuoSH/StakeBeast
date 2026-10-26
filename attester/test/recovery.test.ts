@@ -113,6 +113,40 @@ test('fast restart (< 15 s) inside the window keeps the session attestable', asy
   rig.cleanup();
 });
 
+test('D1 restart consistency: sub-5 s heartbeat intervals replay to the same clean judgment', async () => {
+  const rig = makeRig();
+  rig.chain.addSession('7', soloSession(walletA.address, START_SEC, DURATION, Status.Active));
+  const { token } = await bindWallet(rig, walletA, '7');
+  await rig.core.watchOnce();
+
+  // Accepted heartbeats at +0 s / +4 s / +18 s — the D1 throttle pattern.
+  rig.advanceTo(START_SEC * 1000);
+  const auth = () => authOf(rig, token);
+  rig.core.heartbeat(auth(), { sessionId: '7', seq: 1, clientTs: rig.nowMs });
+  rig.advanceBy(4_000);
+  rig.core.heartbeat(auth(), { sessionId: '7', seq: 2, clientTs: rig.nowMs });
+  rig.advanceBy(14_000);
+  rig.core.heartbeat(auth(), { sessionId: '7', seq: 3, clientTs: rig.nowMs });
+
+  // Restart right after: replay must rebuild the COMPLETE coverage sequence,
+  // so the recovered service judges exactly like the uninterrupted one.
+  rig.advanceBy(2_000);
+  restart(rig);
+  rig.core.recoverOnBoot();
+  const s = auth().session;
+  assert.equal(s.violation, null);
+  assert.equal(s.anomaly, null, 'a throttled journal would replay a phantom gap as restart_gap');
+
+  // Resume and finish the window: the compliant user gets the proof.
+  rig.advanceBy(5_000);
+  rig.core.heartbeat(auth(), { sessionId: '7', seq: 4, clientTs: rig.nowMs });
+  heartbeatSeries(rig, token, '7', 5, 29); // +25 s … +165 s
+  rig.advanceTo(END_SEC * 1000 + 1_000);
+  const res = await rig.core.attestation(auth(), '7', {});
+  assert.ok(res.signature);
+  rig.cleanup();
+});
+
 test('restart: user silence while the service is demonstrably up is still a violation', async () => {
   const rig = makeRig();
   rig.chain.addSession('7', soloSession(walletA.address, START_SEC, DURATION, Status.Active));
