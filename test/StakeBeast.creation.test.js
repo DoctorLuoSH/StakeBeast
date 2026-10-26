@@ -152,6 +152,25 @@ describe("StakeBeast — deployment & creation (FR-01, R6, AC-26)", function () 
       ).to.be.revertedWithCustomError(stake, "DuelTaskParamMismatch");
     });
 
+    it("reverts a supervised session carrying a focus duration (M2 review D3)", async function () {
+      const { stake, alice, bob } = fx;
+      // periodDays = 7 + durationMinutes = 1 used to be accepted, shrinking
+      // the 7-day habit window to 60 seconds.
+      await expect(
+        stake.connect(alice).createSession(Mode.Supervised, bob.address, Payee.Charity, ethers.ZeroAddress, 1, 7, 1, 7, "", { value: ONE_ETH })
+      ).to.be.revertedWithCustomError(stake, "IncompatibleTaskParams");
+    });
+
+    it("reverts a focus session carrying a habit period (SoloFocus and CoFocus)", async function () {
+      const { stake, alice } = fx;
+      await expect(
+        stake.connect(alice).createSession(Mode.SoloFocus, ethers.ZeroAddress, Payee.Charity, ethers.ZeroAddress, 60, 7, 0, 0, "", { value: ONE_ETH })
+      ).to.be.revertedWithCustomError(stake, "IncompatibleTaskParams");
+      await expect(
+        stake.connect(alice).createSession(Mode.CoFocus, ethers.ZeroAddress, Payee.Charity, ethers.ZeroAddress, 60, 7, 0, 0, "", { value: ONE_ETH })
+      ).to.be.revertedWithCustomError(stake, "IncompatibleTaskParams");
+    });
+
     it("reverts on self as counterparty", async function () {
       const { stake, alice } = fx;
       await expect(
