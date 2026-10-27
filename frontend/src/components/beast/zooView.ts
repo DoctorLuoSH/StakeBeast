@@ -21,6 +21,11 @@ export interface BeastEntry {
   metric: string;
   /** Completion date, display-ready (e.g. ISO yyyy-mm-dd). */
   date: string;
+  /**
+   * On-chain session id (uint256, decimal or 0x-hex) behind the mint —
+   * derives the beast's colorway via `colorIndex(sessionId)` (DAPP-31).
+   */
+  sessionId?: string;
 }
 
 /** The three mutually exclusive shelf views. */
