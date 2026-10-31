@@ -17,7 +17,7 @@ interface WalletGateProps {
 }
 
 export function WalletGate({ children, requireConnection = true }: WalletGateProps) {
-  const { status, isSepolia, connect, error } = useWallet();
+  const { status, isExpectedChain, connect, error } = useWallet();
 
   if (status === "no-provider") return <NoMetaMask />;
 
@@ -42,7 +42,7 @@ export function WalletGate({ children, requireConnection = true }: WalletGatePro
     );
   }
 
-  if (status === "connected" && !isSepolia) return <WrongNetwork />;
+  if (status === "connected" && !isExpectedChain) return <WrongNetwork />;
 
   return <>{children}</>;
 }

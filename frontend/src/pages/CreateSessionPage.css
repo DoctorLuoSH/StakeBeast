@@ -22,11 +22,6 @@
   font: inherit;
 }
 
-.create__mode:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-
 .create__mode--active {
   border-color: var(--color-primary);
 }
@@ -37,11 +32,19 @@
   gap: 1rem;
 }
 
+.create__joint-note {
+  border-left: 3px solid var(--color-warning);
+  padding-left: 0.8rem;
+}
+
 .field {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
   font-weight: 600;
+  border: none;
+  padding: 0;
+  margin: 0;
 }
 
 .field input,
@@ -61,4 +64,46 @@
 .field textarea:focus {
   outline: 2px solid var(--color-primary-soft);
   border-color: var(--color-primary);
+}
+
+.field input[aria-invalid="true"],
+.field select[aria-invalid="true"] {
+  border-color: var(--color-danger);
+}
+
+.field__error {
+  color: var(--color-danger);
+  font-weight: 400;
+}
+
+.field__radio {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 400;
+}
+
+/* Modal dialog (co-focus joint-liability consent) */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(4, 8, 14, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  z-index: 40;
+}
+
+.modal {
+  max-width: 30rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
 }

@@ -4,10 +4,14 @@
  * "submit the attestation to settle" hint is gated on `elapsed && !violated`.
  * A session violated first and then run to the window end must show only the
  * violation / settlement-route notice — never the submit-to-settle entry.
+ *
+ * The demo session renders on the bare `/focus` route; a `:sessionId` param
+ * switches the page to the live on-chain view (out of scope here).
  */
 
 import { describe, expect, it, afterEach, beforeEach, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { WalletContext } from "../wallet/walletContext";
 import type { WalletContextValue } from "../wallet/walletContext";
 import { FocusSessionPage } from "./FocusSessionPage";
@@ -18,19 +22,21 @@ const CONNECTED_WALLET: WalletContextValue = {
   status: "connected",
   account: "0x0000000000000000000000000000000000000001",
   chainId: 11155111,
-  isSepolia: true,
+  isExpectedChain: true,
   provider: null,
   error: null,
   connect: async () => {},
-  switchToSepolia: async () => {},
+  switchToExpectedChain: async () => {},
   disconnect: () => {},
 };
 
 function renderPage() {
   return render(
-    <WalletContext.Provider value={CONNECTED_WALLET}>
-      <FocusSessionPage />
-    </WalletContext.Provider>,
+    <MemoryRouter initialEntries={["/focus"]}>
+      <WalletContext.Provider value={CONNECTED_WALLET}>
+        <FocusSessionPage />
+      </WalletContext.Provider>
+    </MemoryRouter>,
   );
 }
 

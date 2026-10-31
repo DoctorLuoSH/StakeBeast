@@ -38,3 +38,28 @@
   align-items: flex-start;
   gap: 0.5rem;
 }
+
+.settlement__balance {
+  margin: 0;
+  font-size: 1.4rem;
+}
+
+.settlement__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.settlement__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.settlement__list-item a {
+  color: var(--color-primary-deep);
+}

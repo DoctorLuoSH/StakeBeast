@@ -5,9 +5,10 @@ DApp on the Sepolia testnet. Stake ETH to open a focus or habit session and
 raise a beast: succeed and the stake returns with an untransferable beast
 NFT; fail and the stake is forfeited by rules chosen up front.
 
-This wave delivers the engineering skeleton: wallet infrastructure, routing,
-page frames, design baseline, and the component interfaces that later waves
-(contract integration, proof service, original artwork) plug into.
+The app is wired to the real contract: four-mode session creation with
+rule-level validation, pending-phase join / start / cancel actions, the
+chain-anchored focus countdown, all settlement terminal states, and the
+pull-payment withdraw entry.
 
 ## Requirements
 
@@ -35,46 +36,72 @@ prefix — the repository carries **zero hardcoded addresses**. See
 | --- | --- |
 | `VITE_CONTRACT_ADDRESS` | StakeBeast session contract (after WP1 deploy) |
 | `VITE_NFT_CONTRACT_ADDRESS` | BeastNFT contract (after WP2 deploy) |
-| `VITE_PROOF_SERVICE_URL` | Machine-attestation service (WP3) |
+| `VITE_PROOF_SERVICE_URL` | Machine-attestation service (WP3) — used for the settle attestation fetch |
 | `VITE_API_BASE_URL` | Social backend REST API (P1, WP4) |
 | `VITE_SEPOLIA_RPC_URL` | Optional RPC used when adding Sepolia to a wallet |
+| `VITE_CHAIN_ID` | Expected chain override; empty = Sepolia. Set `31337` for a local Hardhat node |
 | `VITE_DEMO_MODE` | `true` enables the zoo sample shelf in built bundles (dev server always counts as demo mode) |
 
 ## Wallet flow
 
 1. Detects MetaMask (multi-wallet aware) — otherwise a guided install state.
-2. `Connect Wallet` requests accounts, then **auto-switches to Sepolia**
-   (`wallet_switchEthereumChain`, falling back to `wallet_addEthereumChain`).
+2. `Connect Wallet` requests accounts, then **auto-switches to the expected
+   network** (Sepolia by default; a local Hardhat node when
+   `VITE_CHAIN_ID=31337`) via `wallet_switchEthereumChain`, falling back to
+   `wallet_addEthereumChain`.
 3. `accountsChanged` / `chainChanged` are handled reactively — switching
    accounts or networks in MetaMask updates the UI without a reload.
-4. Any non-Sepolia network renders a blocking "wrong network" state with a
-   one-click switch.
+4. Any wrong network renders a blocking state with a one-click switch.
+
+## Local Hardhat walkthrough
+
+`scripts/ui-walkthrough.mjs` drives the real UI (headless Chrome + a scripted
+EIP-1193 wallet shim over the Hardhat dev accounts) through all four modes
+and their main terminal states — solo success with attestation settle +
+withdraw, supervised verify, mutual-bet join / admit-defeat / cross-verify,
+co-focus handshake + joint forfeit, cancel-after-start-window, permissionless
+timeout forfeit, and admin void — saving a screenshot per step:
+
+```bash
+# from the repo root: npm install && npx hardhat compile
+# from attester/:     npm install && npm run build
+npm install                              # frontend deps incl. playwright-core
+node scripts/ui-walkthrough.mjs          # screenshots → ./walkthrough-shots/
+```
+
+The script starts and stops its own Hardhat node, attester and dev server,
+and deploys a contract instance with demo-sized windows (join 90 s, start
+90 s, grace 120 s) so the whole run takes roughly ten minutes.
 
 ## Project layout
 
 ```
 src/
-├── config/          # env access (zero hardcode) + Sepolia network metadata
+├── config/          # env access (zero hardcode) + expected-chain metadata
 ├── wallet/          # EIP-1193 typing, WalletProvider (connect/switch/listen), useWallet
-├── lib/             # etherscan links, formatters, tx error classification
+├── lib/             # explorer links, formatters, tx error classification,
+│                    # sessionForm validation (R6 mirror), proofClient (DAPP-35 seam), useNow
+├── contract/        # StakeBeast ABI + typed client, revert decoding → human messages,
+│                    # sessionView derivation, useStakeBeast/useSession/useClaimable hooks
 ├── components/
 │   ├── layout/      # AppLayout (responsive nav shell)
 │   ├── wallet/      # ConnectButton, WalletGate (guards pages by wallet state)
 │   ├── states/      # NoMetaMask, WrongNetwork, EmptyState screens
-│   ├── tx/          # TxStatusBanner (pending/success/failure + Etherscan link)
+│   ├── tx/          # TxStatusBanner (pending/success/failure + explorer link), useTx
 │   ├── beast/       # BeastSprite (SVG growth/flee animation pipeline), BeastCard,
 │   │                # ZooShelf (real mints / demo samples / empty state — mutually exclusive)
 │   └── CountdownTimer.tsx
-└── pages/           # Home, CreateSession (4 modes), FocusSession, Settlement,
-                     # Review (supervisor), Profile/My Zoo, NotFound
+└── pages/           # Home, CreateSession (4 modes), FocusSession (+ focus/ chain views),
+                     # Settlement, Review (supervisor), Profile/My Zoo, NotFound
 ```
 
 ## Deliberate non-goals for this wave
 
-Per the pre-freeze plan, this skeleton does **not** call contracts (ABI
-frozen in DAPP-2), talk to the proof/social services, or implement the
-business state machine. Buttons that will trigger transactions are visibly
-disabled and labelled accordingly.
+The proof-service session protocol (bind at creation, arming, heartbeat loop,
+proof-state-driven settlement hints) is DAPP-35 — `lib/proofClient.ts` carries
+only the attestation retrieval the settle call needs. The social layer
+(check-in upload, review feed) and the on-chain profile/zoo data are separate
+waves; `/focus` without a session id keeps the animation-pipeline demo.
 
 ## Conventions
 

@@ -7,7 +7,7 @@ import {
 import type { ReactNode } from "react";
 import { BrowserProvider } from "ethers";
 import type { Eip1193Provider } from "ethers";
-import { SEPOLIA_ADD_CHAIN_PARAMS, SEPOLIA_CHAIN_ID } from "../config/chains";
+import { EXPECTED_CHAIN, EXPECTED_CHAIN_ID } from "../config/chains";
 import { getMetaMaskProvider } from "./eip1193";
 import type { Eip1193Provider as WalletEip1193 } from "./eip1193";
 import { WalletContext } from "./walletContext";
@@ -79,21 +79,21 @@ export function WalletProvider({ children }: WalletProviderProps) {
     };
   }, [injected, refreshAccounts, refreshChain]);
 
-  const switchToSepolia = useCallback(async () => {
+  const switchToExpectedChain = useCallback(async () => {
     if (!injected) throw new Error("MetaMask is not installed.");
     setError(null);
     try {
       await injected.request({
         method: "wallet_switchEthereumChain",
-        params: [{ chainId: SEPOLIA_ADD_CHAIN_PARAMS.chainId }],
+        params: [{ chainId: EXPECTED_CHAIN.addChainParams.chainId }],
       });
     } catch (err) {
       const code = (err as { code?: number })?.code;
       if (code === 4902) {
-        // Sepolia unknown to this wallet: add it, then switch.
+        // Chain unknown to this wallet: add it, then switch.
         await injected.request({
           method: "wallet_addEthereumChain",
-          params: [SEPOLIA_ADD_CHAIN_PARAMS],
+          params: [EXPECTED_CHAIN.addChainParams],
         });
       } else if (code === 4001) {
         setError("Network switch was rejected in MetaMask.");
@@ -121,9 +121,9 @@ export function WalletProvider({ children }: WalletProviderProps) {
 
       const hex = (await injected.request({ method: "eth_chainId" })) as string;
       await refreshChain(hex);
-      if (Number.parseInt(hex, 16) !== SEPOLIA_CHAIN_ID) {
-        // Wrong network: nudge the wallet onto Sepolia automatically.
-        await switchToSepolia();
+      if (Number.parseInt(hex, 16) !== EXPECTED_CHAIN_ID) {
+        // Wrong network: nudge the wallet onto the expected chain automatically.
+        await switchToExpectedChain();
       }
     } catch (err) {
       const code = (err as { code?: number })?.code;
@@ -135,7 +135,7 @@ export function WalletProvider({ children }: WalletProviderProps) {
     } finally {
       setConnecting(false);
     }
-  }, [injected, refreshAccounts, refreshChain, switchToSepolia]);
+  }, [injected, refreshAccounts, refreshChain, switchToExpectedChain]);
 
   const disconnect = useCallback(() => {
     setAccount(null);
@@ -153,11 +153,11 @@ export function WalletProvider({ children }: WalletProviderProps) {
     status,
     account,
     chainId,
-    isSepolia: chainId === SEPOLIA_CHAIN_ID,
+    isExpectedChain: chainId === EXPECTED_CHAIN_ID,
     provider,
     error,
     connect,
-    switchToSepolia,
+    switchToExpectedChain,
     disconnect,
   };
 

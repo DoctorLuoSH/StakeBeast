@@ -5,11 +5,11 @@
 
 import { useWallet } from "../../wallet/useWallet";
 import { shortAddress } from "../../lib/format";
-import { SEPOLIA_NAME } from "../../config/chains";
+import { EXPECTED_CHAIN } from "../../config/chains";
 import "./ConnectButton.css";
 
 export function ConnectButton() {
-  const { status, account, chainId, isSepolia, connect, disconnect } = useWallet();
+  const { status, account, chainId, isExpectedChain, connect, disconnect } = useWallet();
 
   if (status === "no-provider") {
     return (
@@ -40,10 +40,10 @@ export function ConnectButton() {
   return (
     <div className="connect-button__cluster">
       <span
-        className={`connect-button__network${isSepolia ? "" : " connect-button__network--wrong"}`}
-        title={isSepolia ? SEPOLIA_NAME : `Wrong network (chain ${chainId ?? "?"})`}
+        className={`connect-button__network${isExpectedChain ? "" : " connect-button__network--wrong"}`}
+        title={isExpectedChain ? EXPECTED_CHAIN.name : `Wrong network (chain ${chainId ?? "?"})`}
       >
-        {isSepolia ? SEPOLIA_NAME : "Wrong network"}
+        {isExpectedChain ? EXPECTED_CHAIN.name : "Wrong network"}
       </span>
       <button
         type="button"

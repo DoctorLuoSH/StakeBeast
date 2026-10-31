@@ -13,16 +13,16 @@ export interface WalletContextValue {
   account: string | null;
   /** Decimal chain id of the currently selected network. */
   chainId: number | null;
-  /** True when connected to Sepolia — the only supported network. */
-  isSepolia: boolean;
+  /** True when the wallet is on the network this build targets (see config/chains). */
+  isExpectedChain: boolean;
   /** Ethers v6 provider bound to the injected wallet (null without MetaMask). */
   provider: BrowserProvider | null;
   /** Last wallet-layer error message (connect / switch failures). */
   error: string | null;
-  /** Request accounts, then auto-switch to Sepolia when on a wrong network. */
+  /** Request accounts, then auto-switch to the expected network when wrong. */
   connect: () => Promise<void>;
-  /** Switch (or add then switch) the wallet network to Sepolia. */
-  switchToSepolia: () => Promise<void>;
+  /** Switch (or add then switch) the wallet network to the expected chain. */
+  switchToExpectedChain: () => Promise<void>;
   /** Forget the local session. MetaMask keeps its own permission. */
   disconnect: () => void;
 }
