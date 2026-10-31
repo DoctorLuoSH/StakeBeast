@@ -5,15 +5,17 @@
  * co-focus start handshake / cancel after the phase deadline). Once Active,
  * the countdown and growth animation anchor to the chain's SessionStarted
  * window (startTime / endTime from the contract, refreshed on every session
- * event). The violation warning remains a local visual signal until the
- * proof-service wiring (DAPP-35); settlement happens on the settlement page.
+ * event). For machine-proof modes the proof tracker (DAPP-35) binds to the
+ * attester, runs the heartbeat loop and reports visibility events; the
+ * settlement prompt is driven by the service-confirmed proof state, never by
+ * local inference. Settlement itself happens on the settlement page.
  *
  * The transaction banner lives at page level so a "confirmed" state survives
  * the phase transition the confirmed action triggers (start → Active, admit
  * defeat → Forfeited, …).
  */
 
-import { useEffect, useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { formatEther, isAddress, ZeroAddress } from "ethers";
 import { useWallet } from "../../wallet/useWallet";
@@ -30,6 +32,9 @@ import { CountdownTimer } from "../../components/CountdownTimer";
 import { EmptyState } from "../../components/states/EmptyState";
 import { shortAddress } from "../../lib/format";
 import { useNow } from "../../lib/useNow";
+import { useProofTracking } from "../../lib/useProofTracking";
+import type { UseProofTracking } from "../../lib/useProofTracking";
+import type { ProofTrackState } from "../../lib/proofTracker";
 import "../FocusSessionPage.css";
 
 interface Props {
@@ -38,11 +43,19 @@ interface Props {
 
 export function ChainFocusSession({ sessionId }: Props) {
   const { session, loading, error, refresh } = useSession(sessionId);
-  const { account } = useWallet();
+  const { account, provider } = useWallet();
   const { configError } = useStakeBeast();
   const owner = useOwner();
   const nowSec = Math.floor(useNow(1000) / 1000);
   const txRunner = useTx();
+  const signMessage = useMemo(
+    () =>
+      provider
+        ? async (message: string) => (await provider.getSigner()).signMessage(message)
+        : null,
+    [provider],
+  );
+  const proof = useProofTracking({ session, sessionId, account, signMessage });
 
   if (configError) {
     return (
@@ -97,6 +110,7 @@ export function ChainFocusSession({ sessionId }: Props) {
           nowSec={nowSec}
           refresh={refresh}
           txRunner={txRunner}
+          proof={proof}
         />
       ) : (
         <ActiveSession
@@ -106,6 +120,7 @@ export function ChainFocusSession({ sessionId }: Props) {
           nowSec={nowSec}
           refresh={refresh}
           txRunner={txRunner}
+          proof={proof}
         />
       )}
 
@@ -127,20 +142,49 @@ interface PhaseProps {
   nowSec: number;
   refresh: () => void;
   txRunner: UseTx;
+  proof: UseProofTracking;
 }
 
-function PendingPhase({ session, sessionId, actions, nowSec, refresh, txRunner }: PhaseProps) {
+/** Injected-wallet mobile browser — the start guidance targets these. */
+function isMobileWalletBrowser(): boolean {
+  if (typeof navigator === "undefined" || typeof window === "undefined") return false;
+  return (
+    /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent) &&
+    (window as { ethereum?: unknown }).ethereum !== undefined
+  );
+}
+
+function PendingPhase({ session, sessionId, actions, nowSec, refresh, txRunner, proof }: PhaseProps) {
   const { api } = useStakeBeast();
   const [joinPayee, setJoinPayee] = useState<Payee>(Payee.Charity);
   const [joinCustomPayee, setJoinCustomPayee] = useState("");
   const [joinError, setJoinError] = useState<string | null>(null);
   const { tx, run } = txRunner;
   const pending = tx.phase === "pending";
+  const mobileWallet = isMobileWalletBrowser();
 
   const shareHint = `Share this page's URL with your ${session.mode === Mode.Duel ? "opponent" : "partner"} — it contains the session id.`;
 
+  // Start protocol (machine-proof): ready (bind) → startSession tx → arming
+  // notice. The bind folds into the click when it has not happened yet.
   const doStart = () => {
-    if (api) void run(() => api.startSession(sessionId), refresh, "Start");
+    if (!api) return;
+    void (async () => {
+      if (proof.enabled && proof.state.phase === "unbound") {
+        const bound = await proof.bind();
+        if (!bound) return; // bind error surfaces in the tracking panel
+      }
+      void run(
+        () =>
+          api.startSession(sessionId).then((resp) => {
+            // Arm the moment the tx is broadcast — the service watches it.
+            if (proof.enabled) proof.notifyStarted(resp.hash);
+            return resp;
+          }),
+        refresh,
+        "Start",
+      );
+    })();
   };
   const doCancel = () => {
     if (api) void run(() => api.cancelPending(sessionId), refresh, "Cancel");
@@ -231,6 +275,10 @@ function PendingPhase({ session, sessionId, actions, nowSec, refresh, txRunner }
         </>
       ) : null}
 
+      {isMachineProof(session.mode) && proof.enabled ? (
+        <ProofTrackingPanel proof={proof} mobile={mobileWallet} />
+      ) : null}
+
       {actions.join ? (
         <div className="focus__join">
           {session.mode === Mode.Duel ? (
@@ -304,10 +352,9 @@ function PendingPhase({ session, sessionId, actions, nowSec, refresh, txRunner }
 /* Active phase                                                        */
 /* ------------------------------------------------------------------ */
 
-function ActiveSession({ session, sessionId, actions, nowSec, refresh, txRunner }: PhaseProps) {
+function ActiveSession({ session, sessionId, actions, nowSec, refresh, txRunner, proof }: PhaseProps) {
   const { api } = useStakeBeast();
   const { tx, run } = txRunner;
-  const [violated, setViolated] = useState(false);
   const [confirmAdmit, setConfirmAdmit] = useState(false);
   const pending = tx.phase === "pending";
 
@@ -318,18 +365,20 @@ function ActiveSession({ session, sessionId, actions, nowSec, refresh, txRunner 
   const progress = Math.min(1, Math.max(0, (nowMs - startMs) / windowMs));
   const windowOver = nowSec >= session.endTime;
 
-  // Local visual violation signal only: hiding the tab flags the warning
-  // visuals. The authoritative violation lives in the proof service
-  // (DAPP-35) and gates the attestation, not this page.
-  useEffect(() => {
-    const onVisibility = () => {
-      if (document.hidden) setViolated(true);
-    };
-    document.addEventListener("visibilitychange", onVisibility);
-    return () => document.removeEventListener("visibilitychange", onVisibility);
-  }, []);
+  // Proof state (service-confirmed where available): the violation flag and
+  // the settlement prompt come from the attester, not from local inference.
+  const machine = isMachineProof(session.mode);
+  const violated = proof.enabled && (proof.state.violation || proof.state.localHidden);
+  const failed = windowOver && violated;
+  const attestationReady = proof.enabled && proof.state.attestationReady;
 
-  const mood: BeastMood = violated ? "warning" : windowOver ? "happy" : "growing";
+  const mood: BeastMood = failed
+    ? "fled"
+    : violated
+      ? "warning"
+      : windowOver
+        ? "happy"
+        : "growing";
 
   const doAdmitDefeat = () => {
     setConfirmAdmit(false);
@@ -363,13 +412,38 @@ function ActiveSession({ session, sessionId, actions, nowSec, refresh, txRunner 
         >
           <span className="focus__progress-fill" style={{ width: `${progress * 100}%` }} />
         </div>
-        {isMachineProof(session.mode) ? (
-          <p className="muted focus__hint">
-            Stay focused — the proof service tracks coverage and issues the
-            completion attestation.
-            {/* TODO(DAPP-35): replace this static hint with the proof-state
-                driven settlement prompt (bind/arm/heartbeat/status). */}
-          </p>
+        {machine ? (
+          proof.enabled ? (
+            <>
+              <p className="muted focus__hint" data-testid="proof-hint">
+                {proofHintText(proof.state, windowOver)}
+              </p>
+              {proof.state.phase === "unbound" || proof.state.phase === "binding" ? (
+                <>
+                  {proof.state.error ? (
+                    <p className="field__error" role="alert">
+                      {proof.state.error}
+                    </p>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="button button--ghost"
+                    disabled={proof.state.phase === "binding"}
+                    onClick={() => void proof.bind()}
+                  >
+                    {proof.state.phase === "binding"
+                      ? "Confirm the signature…"
+                      : "Resume focus tracking"}
+                  </button>
+                </>
+              ) : null}
+            </>
+          ) : (
+            <p className="muted focus__hint">
+              Stay focused — the proof service tracks coverage and issues the
+              completion attestation.
+            </p>
+          )
         ) : (
           <p className="muted focus__hint">
             Human proof: the verifier confirms completion on-chain. Check-ins
@@ -378,29 +452,97 @@ function ActiveSession({ session, sessionId, actions, nowSec, refresh, txRunner 
         )}
       </section>
 
-      {violated ? (
+      {proof.enabled && proof.state.phase === "takeover" ? (
         <section className="card focus__warning" role="alert">
-          <h3>Violation flagged (local signal)</h3>
+          <h3>Tracking moved elsewhere</h3>
           <p>
-            This tab was hidden, which the proof service treats as a violation
-            for machine-proof sessions — it will refuse to attest. The
-            authoritative proof state arrives with DAPP-35; if coverage fails,
-            admit defeat below or the stake forfeits after the deadline.
+            This session was bound from another tab or device — only one client
+            may track a session, so this tab stopped its heartbeats. If the
+            other client is gone, take tracking back (one signature).
+          </p>
+          <div className="focus__actions">
+            <button type="button" className="button" onClick={() => void proof.bind()}>
+              Take back tracking
+            </button>
+          </div>
+        </section>
+      ) : null}
+
+      {violated && !failed ? (
+        <section className="card focus__warning" role="alert">
+          <h3>Violation flagged</h3>
+          <p>
+            {proof.state.violation
+              ? "The proof service recorded a violation — this session can no longer receive a completion proof."
+              : "This tab was hidden — the event was reported to the proof service, which treats it as a violation for machine-proof sessions."}{" "}
+            Admit defeat uses your chosen route; after the settlement deadline,
+            anyone can trigger forfeiture to charity.
           </p>
         </section>
       ) : null}
 
-      {windowOver ? (
-        <section className="card">
-          <h2>Window complete — settle the session</h2>
-          <p className="muted">
-            {isMachineProof(session.mode)
-              ? "Fetch the completion attestation and settle on the settlement page."
-              : "The verifier can confirm completion on the settlement page."}
+      {failed ? (
+        <section className="card focus__failed" role="alert">
+          <h3>Session failed</h3>
+          <p>
+            Only a dried sprout remains — the beast ran away. Failed sessions
+            mint no NFT.
           </p>
-          <Link className="button" to={`/settlement/${sessionId.toString()}`}>
-            Go to settlement
-          </Link>
+          <p className="focus__funds">
+            <span className="focus__funds-dot" aria-hidden="true" />
+            Funds pending settlement
+          </p>
+          <p className="muted">
+            Admit defeat to pay your chosen route; after the deadline anyone
+            can trigger forfeiture to charity.
+          </p>
+        </section>
+      ) : null}
+
+      {windowOver && !violated ? (
+        <section className="card">
+          {!machine ? (
+            <>
+              <h2>Window complete — settle the session</h2>
+              <p className="muted">
+                The verifier can confirm completion on the settlement page.
+              </p>
+              <Link className="button" to={`/settlement/${sessionId.toString()}`}>
+                Go to settlement
+              </Link>
+            </>
+          ) : attestationReady ? (
+            <>
+              <h2>Coverage verified — settle the session</h2>
+              <p className="muted">
+                The proof service confirmed a clean window — the completion
+                attestation is ready to fetch.
+              </p>
+              <Link className="button" to={`/settlement/${sessionId.toString()}`}>
+                Go to settlement
+              </Link>
+            </>
+          ) : proof.state.uncertifiable ? (
+            <>
+              <h2>Not certifiable — platform fault</h2>
+              <p className="muted">
+                The proof service could not certify this window (platform
+                fault, no one is at fault) — the session can be voided for a
+                full refund.
+              </p>
+              <Link className="button button--ghost" to={`/settlement/${sessionId.toString()}`}>
+                Open settlement
+              </Link>
+            </>
+          ) : (
+            <>
+              <h2>Finalizing coverage…</h2>
+              <p className="muted">
+                The proof service is replaying the window before issuing the
+                attestation — this usually takes a few seconds.
+              </p>
+            </>
+          )}
         </section>
       ) : null}
 
@@ -451,6 +593,104 @@ function ActiveSession({ session, sessionId, actions, nowSec, refresh, txRunner 
         <LinkedDuelPosition linkedId={session.linkedSessionId} />
       ) : null}
     </>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Proof tracking (machine-proof modes)                                */
+/* ------------------------------------------------------------------ */
+
+/** Status line for the active phase, driven by the service proof state. */
+function proofHintText(state: ProofTrackState, windowOver: boolean): string {
+  if (state.phase === "binding") {
+    return "Resuming focus tracking — confirm the wallet signature…";
+  }
+  if (state.phase === "takeover") {
+    return "Tracking moved to another tab or device — this tab stopped heartbeats.";
+  }
+  if (state.violation) {
+    return "Violation confirmed by the proof service — this session can no longer receive a completion proof.";
+  }
+  if (state.localHidden) {
+    return "Hidden-tab event reported — the proof service is confirming the violation…";
+  }
+  if (state.attestationReady) {
+    return "Coverage verified — the completion attestation is ready.";
+  }
+  if (state.uncertifiable) {
+    return "The proof service could not certify this window (platform fault) — the session can be voided for a full refund.";
+  }
+  if (windowOver) {
+    return "Window ended — the proof service is finalizing coverage…";
+  }
+  if (state.unreachable) {
+    return "Proof service unreachable — retrying every few seconds. Keep this page open.";
+  }
+  if (state.phase === "unbound") {
+    return "Focus tracking needs a bind — one wallet signature resumes the heartbeats.";
+  }
+  if (state.lifecycle === "arming") {
+    return "Arming the proof service — confirming the start transaction…";
+  }
+  if (state.lastAckSeq > 0) {
+    return `Monitoring — heartbeat #${state.lastAckSeq} acknowledged.`;
+  }
+  return "Monitoring starts with the on-chain start window.";
+}
+
+/**
+ * Pending-phase tracking panel: the ready step of the start protocol.
+ * Binding is one wallet signature (no gas); once bound, the proof service
+ * monitors coverage from the first second of the on-chain window.
+ */
+function ProofTrackingPanel({ proof, mobile }: { proof: UseProofTracking; mobile: boolean }) {
+  const { state } = proof;
+  const mobileHint = mobile
+    ? " On mobile: finish every wallet step before starting — then keep this page in the foreground until the window ends."
+    : "";
+
+  if (state.phase === "unbound" || state.phase === "binding") {
+    return (
+      <div className="focus__tracking">
+        <p className="muted">
+          Focus tracking is off. Bind once (one wallet signature, no gas) so the
+          proof service can monitor coverage from the first second — a window
+          without coverage cannot be attested.{mobileHint}
+        </p>
+        {state.error ? (
+          <p className="field__error" role="alert">
+            {state.error}
+          </p>
+        ) : null}
+        <div>
+          <button
+            type="button"
+            className="button button--ghost"
+            disabled={state.phase === "binding"}
+            onClick={() => void proof.bind()}
+          >
+            {state.phase === "binding"
+              ? "Confirm the signature in your wallet…"
+              : "Enable focus tracking"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="focus__tracking">
+      <p className="muted">
+        Focus tracking ready ✓ — the proof service starts monitoring with the
+        on-chain start and needs this page open until the window ends.
+        {mobileHint}
+      </p>
+      {state.participants.length > 0 ? (
+        <p className="muted">
+          Bound: {state.participants.map((p) => `${shortAddress(p.address)} ✓`).join(" · ")}
+        </p>
+      ) : null}
+    </div>
   );
 }
 

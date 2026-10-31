@@ -36,7 +36,7 @@ prefix — the repository carries **zero hardcoded addresses**. See
 | --- | --- |
 | `VITE_CONTRACT_ADDRESS` | StakeBeast session contract (after WP1 deploy) |
 | `VITE_NFT_CONTRACT_ADDRESS` | BeastNFT contract (after WP2 deploy) |
-| `VITE_PROOF_SERVICE_URL` | Machine-attestation service (WP3) — used for the settle attestation fetch |
+| `VITE_PROOF_SERVICE_URL` | Machine-attestation service (WP3) — focus tracking (bind/arm/heartbeat) and the settle attestation fetch |
 | `VITE_API_BASE_URL` | Social backend REST API (P1, WP4) |
 | `VITE_SEPOLIA_RPC_URL` | Optional RPC used when adding Sepolia to a wallet |
 | `VITE_CHAIN_ID` | Expected chain override; empty = Sepolia. Set `31337` for a local Hardhat node |
@@ -71,7 +71,7 @@ node scripts/ui-walkthrough.mjs          # screenshots → ./walkthrough-shots/
 
 The script starts and stops its own Hardhat node, attester and dev server,
 and deploys a contract instance with demo-sized windows (join 90 s, start
-90 s, grace 120 s) so the whole run takes roughly ten minutes.
+90 s, grace 120 s) so the whole run takes roughly twelve minutes.
 
 ## Project layout
 
@@ -80,7 +80,8 @@ src/
 ├── config/          # env access (zero hardcode) + expected-chain metadata
 ├── wallet/          # EIP-1193 typing, WalletProvider (connect/switch/listen), useWallet
 ├── lib/             # explorer links, formatters, tx error classification,
-│                    # sessionForm validation (R6 mirror), proofClient (DAPP-35 seam), useNow
+│                    # sessionForm validation (R6 mirror), useNow,
+│                    # proofClient + proofTracker + useProofTracking (attester protocol)
 ├── contract/        # StakeBeast ABI + typed client, revert decoding → human messages,
 │                    # sessionView derivation, useStakeBeast/useSession/useClaimable hooks
 ├── components/
@@ -95,13 +96,24 @@ src/
                      # Settlement, Review (supervisor), Profile/My Zoo, NotFound
 ```
 
+## Proof tracking (machine-proof sessions)
+
+The focus page owns the attester protocol end to end (`lib/proofTracker.ts` +
+`lib/useProofTracking.ts` over `lib/proofClient.ts`): a one-time challenge
+bind (one wallet signature) readies tracking; the start click then sends the
+`startSession` transaction and posts the arming notice on broadcast; a 5 s
+heartbeat loop runs while the window is open, resuming from the service's
+`nextHeartbeatSeq` after any reconnect; visibility events are reported (an
+in-window hidden tab is a permanent violation). The settlement prompt is
+driven by the service-confirmed proof state — it appears only once coverage
+is verified — and a bind from another tab/device surfaces the single-client
+takeover notice.
+
 ## Deliberate non-goals for this wave
 
-The proof-service session protocol (bind at creation, arming, heartbeat loop,
-proof-state-driven settlement hints) is DAPP-35 — `lib/proofClient.ts` carries
-only the attestation retrieval the settle call needs. The social layer
-(check-in upload, review feed) and the on-chain profile/zoo data are separate
-waves; `/focus` without a session id keeps the animation-pipeline demo.
+The social layer (check-in upload, review feed) and the on-chain profile/zoo
+data are separate waves; `/focus` without a session id keeps the
+animation-pipeline demo.
 
 ## Conventions
 

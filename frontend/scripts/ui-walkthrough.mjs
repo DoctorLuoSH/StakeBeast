@@ -1,19 +1,28 @@
 /**
- * UI walkthrough (DAPP-38 evidence): drives the real frontend against a local
- * Hardhat node + attester service with a scripted EIP-1193 wallet shim
- * (window.ethereum backed by Hardhat dev accounts), exercising all four
- * session modes and their main terminal states, with screenshots per step.
+ * UI walkthrough (DAPP-38 + DAPP-35 evidence): drives the real frontend
+ * against a local Hardhat node + attester service with a scripted EIP-1193
+ * wallet shim (window.ethereum backed by Hardhat dev accounts), exercising
+ * all four session modes and their main terminal states, with screenshots
+ * per step.
+ *
+ * Since DAPP-35 the page itself owns the proof protocol: bind (challenge +
+ * signature), arming on start broadcast, the 5 s heartbeat loop, visibility
+ * events, and the proof-state-driven settlement prompt. The script only
+ * operates the UI — no scripted heartbeats.
  *
  * Flows:
- *   1. SoloFocus   create → start → (attester heartbeats) → settle → withdraw
+ *   1. SoloFocus   create → bind (tracking ready) → start → page heartbeats →
+ *                  attestation-ready prompt → settle → withdraw
  *   2. Supervised  create → verifier confirms → completed
  *   3. Duel        create → opponent joins → admit defeat (pays opponent) →
  *                  cross-verify → withdraw
  *   4. CoFocus     create (joint-liability consent) → join → start handshake →
  *                  admit defeat (both stakes to charity)
  *   5. SoloFocus   create, never start → cancel after the start window
- *   6. SoloFocus   create → start, no proof → forfeit after the deadline
+ *   6. SoloFocus   create → start, no settle → forfeit after the deadline
  *   7. Owner       void a pending session (full refund)
+ *   8. SoloFocus   start → simulated hidden tab → violation flagged →
+ *                  Session failed → admit defeat → forfeited
  *
  * Prerequisites (repo root): `npm install && npx hardhat compile`;
  * `cd attester && npm install && npm run build`; frontend `npm install`
@@ -60,7 +69,6 @@ const CHAIN_ID_HEX = "0x7a69";
 const JOIN_WINDOW = 90;
 const START_WINDOW = 90;
 const GRACE_DURATION = 120;
-const HB_CADENCE_MS = 5000;
 
 const MNEMONIC = "test test test test test test test test test test test junk";
 const walletAt = (i) =>
@@ -146,8 +154,6 @@ const SHIM = `(() => {
   };
 })();`;
 
-const lastTxByAddress = new Map();
-
 function makeRpc(wallet, provider) {
   return async (method, params = []) => {
     if (process.env.VERBOSE) log(`rpc ${wallet.address.slice(0, 8)} ${method}`);
@@ -174,7 +180,6 @@ function makeRpc(wallet, provider) {
           data: tx.data ?? "0x",
           value: tx.value ? BigInt(tx.value) : 0n,
         });
-        lastTxByAddress.set(wallet.address.toLowerCase(), resp.hash);
         return resp.hash;
       }
       default:
@@ -193,54 +198,15 @@ async function userPage(browser, wallet, provider) {
   return page;
 }
 
-/* ------------------------------------------------------ attester api -- */
-
-async function api(method, p, body, token) {
-  const res = await fetch(`${ATTESTER_URL}${p}`, {
-    method,
-    headers: {
-      "content-type": "application/json",
-      ...(token ? { authorization: `Bearer ${token}` } : {}),
-    },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
-  let json = null;
-  try {
-    json = await res.json();
-  } catch {
-    /* empty body */
-  }
-  return { status: res.status, body: json };
-}
-
-/** Bind + arm + heartbeat until the session window ends (scripted proof side). */
-async function pumpHeartbeats({ sessionId, wallet, startTxHash, contract }) {
-  const sessionIdStr = sessionId.toString();
-  const base = { chainId: CHAIN_ID, contract, sessionId: sessionIdStr, address: wallet.address };
-  const ch = await api("POST", "/v1/bind/challenge", base);
-  if (ch.status !== 200) throw new Error(`bind challenge failed: ${JSON.stringify(ch.body)}`);
-  const bindSig = await wallet.signMessage(ch.body.message);
-  const bind = await api("POST", "/v1/bind", { ...base, nonce: ch.body.nonce, bindSig });
-  if (bind.status !== 200) throw new Error(`bind failed: ${JSON.stringify(bind.body)}`);
-  const token = bind.body.clientToken;
-  let seq = bind.body.nextHeartbeatSeq;
-
-  const arm = await api("POST", "/v1/arm", { sessionId: sessionIdStr, txHash: startTxHash }, token);
-  if (arm.status !== 200) throw new Error(`arm failed: ${JSON.stringify(arm.body)}`);
-
-  const s = await pumpHeartbeats.stake.getSession(sessionId);
-  const endMs = Number(s.endTime) * 1000;
-  while (Date.now() < endMs + 2000) {
-    const hb = await api("POST", "/v1/heartbeat", { sessionId: sessionIdStr, seq: seq++ }, token);
-    if (hb.status !== 200 || hb.body?.ok !== true) {
-      log(`heartbeat rejected: ${hb.status} ${JSON.stringify(hb.body)}`);
-    }
-    await sleep(HB_CADENCE_MS);
-  }
-  log(`heartbeats done for session ${sessionIdStr}`);
-}
-
 /* ------------------------------------------------------------ helpers -- */
+
+/** Simulate a tab hide/show cycle for the page's visibilitychange handler. */
+async function setPageHidden(page, hidden) {
+  await page.evaluate((h) => {
+    Object.defineProperty(document, "hidden", { get: () => h, configurable: true });
+    document.dispatchEvent(new Event("visibilitychange"));
+  }, hidden);
+}
 
 async function shot(page, name) {
   await page.screenshot({ path: path.join(SHOTS_DIR, `${name}.png`), fullPage: true });
@@ -356,7 +322,6 @@ async function main() {
   ).waitForDeployment();
   await (await nft.setMinter(await stake.getAddress())).wait();
   const stakeAddress = await stake.getAddress();
-  pumpHeartbeats.stake = stake;
   log(`StakeBeast at ${stakeAddress}`);
 
   log("starting attester…");
@@ -404,23 +369,33 @@ async function main() {
     const bobPage = await userPage(browser, bob, provider);
 
     // ------------------------------------------- 1. SoloFocus success --
-    log("flow 1: solo focus success");
+    log("flow 1: solo focus success (page-driven proof protocol)");
     const soloId = await uiCreateSession(alicePage, {
       mode: "Solo Focus",
       stake: "0.05",
       duration: "2",
     });
     await shot(alicePage, "01-solo-pending-start");
+    // Ready step of the start protocol: one signature binds the tracker.
+    await alicePage.getByRole("button", { name: /Enable focus tracking/ }).click();
+    await alicePage.getByText(/Focus tracking ready/).waitFor({ timeout: 60_000 });
+    await shot(alicePage, "01b-solo-tracking-ready");
     await clickAndConfirm(alicePage, /Start session/);
-    const startTxHash = lastTxByAddress.get(alice.address.toLowerCase());
-    pumpHeartbeats({ sessionId: soloId, wallet: alice, startTxHash, contract: stakeAddress }).catch(
-      (e) => log(`heartbeat pumper failed: ${e.message}`),
-    );
-    await alicePage.waitForTimeout(3000);
+    // The page arms the service on broadcast and heartbeats on its own.
+    await alicePage
+      .getByText(/Arming the proof service|Monitoring — heartbeat|Monitoring starts/)
+      .waitFor({ timeout: 60_000 });
+    await alicePage.waitForTimeout(6000);
     await shot(alicePage, "02-solo-active-countdown");
 
     const soloSession = await stake.getSession(soloId);
     await waitChainTime(provider, Number(soloSession.endTime) + 2);
+    // The settlement prompt is proof-driven: it appears only once the
+    // service confirms clean coverage (attestationReady).
+    await alicePage
+      .getByRole("heading", { name: /Coverage verified/ })
+      .waitFor({ timeout: 120_000 });
+    await shot(alicePage, "03-solo-attestation-ready");
     await alicePage.getByRole("link", { name: /Go to settlement/ }).click();
     await alicePage.waitForURL(new RegExp(`/settlement/${soloId}`));
     await shot(alicePage, "03-solo-settlement-ready");
@@ -562,6 +537,42 @@ async function main() {
     await ownerPage.getByText(/Session voided/).waitFor({ timeout: 60_000 });
     await shot(ownerPage, "23-voided");
     await ownerPage.context().close();
+
+    // -------------------- 8. violation → Session failed → admit defeat ----
+    log("flow 8: solo focus violation — hidden tab reported, session failed");
+    const vioId = await uiCreateSession(alicePage, {
+      mode: "Solo Focus",
+      stake: "0.01",
+      duration: "2",
+    });
+    // The start click binds (one signature) → startSession tx → arming notice.
+    await clickAndConfirm(alicePage, /Start session/);
+    await alicePage
+      .getByText(/Monitoring — heartbeat|Monitoring starts|Arming the proof service/)
+      .waitFor({ timeout: 60_000 });
+    await alicePage.waitForTimeout(6000); // a few in-window beats first
+
+    // Hiding the tab inside the window is a permanent violation — the page
+    // reports the event and shows the warning immediately.
+    await setPageHidden(alicePage, true);
+    await alicePage.getByText("Violation flagged").waitFor({ timeout: 60_000 });
+    await shot(alicePage, "24-violation-flagged");
+    await setPageHidden(alicePage, false);
+
+    const vioSession = await stake.getSession(vioId);
+    await waitChainTime(provider, Number(vioSession.endTime) + 2);
+    // Failed semantics: no settlement entry for a violated session.
+    await alicePage.getByText("Session failed").waitFor({ timeout: 90_000 });
+    await shot(alicePage, "25-session-failed");
+
+    await alicePage.getByRole("button", { name: "Admit defeat" }).click();
+    // Not clickAndConfirm: the persistent "Session failed" card carries
+    // role="alert", which that helper would misread as an action failure.
+    await alicePage.getByRole("button", { name: /Yes, admit defeat/ }).click();
+    await alicePage.getByText(/Admit defeat confirmed\./).waitFor({ timeout: 90_000 });
+    await gotoApp(alicePage, `/settlement/${vioId}`);
+    await alicePage.getByText(/The beast ran away/).waitFor({ timeout: 60_000 });
+    await shot(alicePage, "26-violation-forfeited");
 
     log("all flows completed");
   } finally {

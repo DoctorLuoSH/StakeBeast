@@ -73,6 +73,21 @@
   transition: width 0.6s ease;
 }
 
+/* Proof-tracking panel on the pending phase (DAPP-35): the ready step of
+   the start protocol (bind → start tx → arming). */
+.focus__tracking {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-m);
+  padding: 0.9rem 1rem;
+}
+
+.focus__tracking p {
+  margin: 0;
+}
+
 /* Violation banner — red reserved for forfeit/violation (PRD §14.5). */
 .focus__warning {
   border-color: var(--color-danger);
@@ -157,7 +172,7 @@
   }
 }
 
-/* Demo controls — de-emphasised placeholder until DAPP-35 wiring. */
+/* Demo controls — de-emphasised placeholder for the chain-free demo. */
 .focus__demo {
   font-size: 0.85rem;
   border-style: dashed;
