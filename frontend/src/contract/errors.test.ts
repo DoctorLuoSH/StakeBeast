@@ -27,6 +27,39 @@ describe("extractRevertData", () => {
     expect(extractRevertData({ code: "ACTION_REJECTED" })).toBeNull();
     expect(extractRevertData(new Error("plain"))).toBeNull();
   });
+
+  it("finds data in an object-valued data wrapper (MetaMask { data: { data } })", () => {
+    const data = revertData("CustomPayeeZero");
+    expect(extractRevertData({ info: { error: { data: { data } } } })).toBe(data);
+  });
+
+  it("finds data in an object-valued result wrapper", () => {
+    const data = revertData("CustomPayeeZero");
+    expect(extractRevertData({ result: { data } })).toBe(data);
+  });
+
+  it("finds data nested under originalError", () => {
+    const data = revertData("CustomPayeeZero");
+    expect(extractRevertData({ originalError: { data } })).toBe(data);
+    expect(extractRevertData({ error: { originalError: { data: { data } } } })).toBe(data);
+  });
+
+  it("survives cyclic wrapper structures", () => {
+    const cyclic: Record<string, unknown> = {};
+    cyclic.info = cyclic;
+    cyclic.data = cyclic;
+    expect(extractRevertData(cyclic)).toBeNull();
+  });
+
+  it("describes the same error consistently across every supported wrapper shape", () => {
+    const data = revertData("CustomPayeeZero");
+    const expected = describeContractError({ code: "CALL_EXCEPTION", data });
+    expect(expected).toMatch(/concrete address/);
+    expect(describeContractError({ info: { error: { data: { data } } } })).toBe(expected);
+    expect(describeContractError({ info: { error: { result: { data } } } })).toBe(expected);
+    expect(describeContractError({ originalError: { data } })).toBe(expected);
+    expect(describeContractError({ cause: { payload: { data: { data } } } })).toBe(expected);
+  });
 });
 
 describe("decodeContractError / describeContractError", () => {

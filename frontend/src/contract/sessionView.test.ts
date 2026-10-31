@@ -203,4 +203,11 @@ describe("forfeitDestinationLabel", () => {
     expect(forfeitDestinationLabel(base(), 1)).toMatch(/deadline passed/);
     expect(forfeitDestinationLabel(base({ mode: Mode.CoFocus }), 2)).toMatch(/joint liability/);
   });
+
+  it("timeout forfeits always describe charity, regardless of the preset payee (B3)", () => {
+    const verifierRoute = base({ payee: Payee.Verifier, mode: Mode.Supervised, verifier: BOB });
+    expect(forfeitDestinationLabel(verifierRoute, 1)).toMatch(/charity \(settlement deadline passed\)/);
+    const customRoute = base({ payee: Payee.Custom, customPayee: EVE });
+    expect(forfeitDestinationLabel(customRoute, 1)).toMatch(/charity \(settlement deadline passed\)/);
+  });
 });

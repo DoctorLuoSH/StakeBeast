@@ -134,6 +134,7 @@ function PendingPhase({ session, sessionId, actions, nowSec, refresh, txRunner }
   const [joinPayee, setJoinPayee] = useState<Payee>(Payee.Charity);
   const [joinCustomPayee, setJoinCustomPayee] = useState("");
   const [joinError, setJoinError] = useState<string | null>(null);
+  const [joinConsentOpen, setJoinConsentOpen] = useState(false);
   const { tx, run } = txRunner;
   const pending = tx.phase === "pending";
 
@@ -148,9 +149,17 @@ function PendingPhase({ session, sessionId, actions, nowSec, refresh, txRunner }
   const doJoin = () => {
     if (!api) return;
     setJoinError(null);
-    if (joinPayee === Payee.Custom && !isAddress(joinCustomPayee.trim())) {
-      setJoinError("A custom forfeit destination needs a valid 0x address.");
-      return;
+    if (joinPayee === Payee.Custom) {
+      const trimmed = joinCustomPayee.trim();
+      if (!isAddress(trimmed)) {
+        setJoinError("A custom forfeit destination needs a valid 0x address.");
+        return;
+      }
+      if (trimmed.toLowerCase() === ZeroAddress) {
+        // The contract rejects a zero custom payee with CustomPayeeZero.
+        setJoinError("The zero address cannot receive a forfeited stake — enter a concrete address.");
+        return;
+      }
     }
     void run(
       () =>
@@ -163,6 +172,21 @@ function PendingPhase({ session, sessionId, actions, nowSec, refresh, txRunner }
       refresh,
       "Join",
     );
+  };
+
+  // Co-focus is joint liability: the joiner funds only after explicitly
+  // confirming that either side's failure sends BOTH stakes to charity
+  // (baseline §4.4 — the creator's consent cannot speak for the joiner).
+  const onJoinClick = () => {
+    if (session.mode === Mode.CoFocus) {
+      setJoinConsentOpen(true);
+      return;
+    }
+    doJoin();
+  };
+  const onJoinConsentConfirm = () => {
+    setJoinConsentOpen(false);
+    doJoin();
   };
 
   return (
@@ -273,7 +297,7 @@ function PendingPhase({ session, sessionId, actions, nowSec, refresh, txRunner }
               {joinError}
             </p>
           ) : null}
-          <button type="button" className="button" disabled={pending} onClick={doJoin}>
+          <button type="button" className="button" disabled={pending} onClick={onJoinClick}>
             {pending ? "Joining…" : `Join & stake ${formatEther(session.stake)} ETH`}
           </button>
         </div>
@@ -295,6 +319,47 @@ function PendingPhase({ session, sessionId, actions, nowSec, refresh, txRunner }
         <button type="button" className="button button--ghost" disabled={pending} onClick={doCancel}>
           {pending ? "Cancelling…" : "Cancel session & refund stake"}
         </button>
+      ) : null}
+
+      {joinConsentOpen ? (
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onClick={() => setJoinConsentOpen(false)}
+        >
+          <div
+            className="modal card"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="cofocus-join-consent-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 id="cofocus-join-consent-title">Joint liability — please confirm</h3>
+            <p>
+              You are joining a co-focus session. If either participant fails
+              or the session is forfeited, <strong>both</strong> stakes —
+              yours and your partner's — go to the charity address, not just
+              the failing side. This cannot be undone once you fund.
+            </p>
+            <div className="modal__actions">
+              <button
+                type="button"
+                className="button button--ghost"
+                onClick={() => setJoinConsentOpen(false)}
+              >
+                Back
+              </button>
+              <button
+                type="button"
+                className="button button--danger"
+                disabled={pending}
+                onClick={onJoinConsentConfirm}
+              >
+                I understand — join with joint liability
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
     </section>
   );

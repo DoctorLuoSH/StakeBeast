@@ -132,6 +132,11 @@ export function validateSessionForm(v: SessionFormValues): ValidatedSessionForm 
         v.mode === "supervised" ? "A supervised session needs a supervisor address." : "A mutual bet needs an opponent address.";
     } else if (!isAddress(cp)) {
       errors.counterparty = "Enter a valid 0x address.";
+    } else if (v.mode === "supervised" && cp.toLowerCase() === ZeroAddress) {
+      // The contract rejects a zero verifier with VerifierRequired — block it
+      // before any transaction. (Duel zero-opponent routing is unchanged, see
+      // the frozen baseline.)
+      errors.counterparty = "The zero address cannot supervise a session — enter a concrete supervisor address.";
     } else if (sameAddress(cp, v.self)) {
       errors.counterparty = "You cannot be your own counterparty — pick a different address.";
     } else {
@@ -159,6 +164,9 @@ export function validateSessionForm(v: SessionFormValues): ValidatedSessionForm 
       errors.customPayee = "A custom forfeit destination needs a concrete address.";
     } else if (!isAddress(cp)) {
       errors.customPayee = "Enter a valid 0x address.";
+    } else if (cp.toLowerCase() === ZeroAddress) {
+      // The contract rejects a zero custom payee with CustomPayeeZero.
+      errors.customPayee = "The zero address cannot receive a forfeited stake — enter a concrete address.";
     } else {
       customPayee = cp;
     }

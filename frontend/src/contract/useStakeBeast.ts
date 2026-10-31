@@ -4,7 +4,7 @@
  * claimable balance and the contract owner.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useWallet } from "../wallet/useWallet";
 import { describeContractError } from "./errors";
 import { getStakeBeast, isContractConfigured } from "./client";
@@ -47,80 +47,126 @@ export interface UseSessionResult {
 const POLL_MS = 12_000;
 
 /**
+ * A fetched value tagged with the exact request identity (the client instance
+ * — one per wallet provider/chain — plus the request subject). A snapshot is
+ * only ever exposed while its identity still matches the current one, so a
+ * late response from a previous session/account/network can never overwrite
+ * the current view, and switching the subject reads as `loading` again.
+ */
+interface SessionSnapshot {
+  api: StakeBeastApi;
+  sessionId: bigint;
+  session: Session | null;
+  error: string | null;
+}
+
+/**
  * Load one session and keep it fresh: refetch on every session-lifecycle
  * event (SessionStarted anchors the countdown, per the unified status table)
  * with a slow poll as fallback for dropped filter subscriptions.
+ *
+ * Race safety: each response is keyed by (api, sessionId) and only the latest
+ * request may publish, so out-of-order responses — across a session switch,
+ * a network switch, or overlapping refreshes of one session — are discarded.
  */
 export function useSession(sessionId: bigint | null): UseSessionResult {
   const { api } = useStakeBeast();
-  const [session, setSession] = useState<Session | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  const refresh = useCallback(async () => {
-    if (!api || sessionId === null) return;
-    try {
-      const s = await api.getSession(sessionId);
-      setSession(s);
-      setError(null);
-    } catch (err) {
-      setError(describeContractError(err) ?? "Could not load the session from the chain.");
-    }
-  }, [api, sessionId]);
-
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
+  const [snapshot, setSnapshot] = useState<SessionSnapshot | null>(null);
+  const [tick, setTick] = useState(0);
+  const seqRef = useRef(0);
+  const refresh = useCallback(() => setTick((t) => t + 1), []);
 
   useEffect(() => {
     if (!api || sessionId === null) return undefined;
-    const unsubscribe = api.onSessionActivity(sessionId, () => void refresh());
-    const poll = window.setInterval(() => void refresh(), POLL_MS);
+    let active = true;
+    const load = () => {
+      const seq = ++seqRef.current;
+      api.getSession(sessionId).then(
+        (session) => {
+          if (active && seq === seqRef.current) {
+            setSnapshot({ api, sessionId, session, error: null });
+          }
+        },
+        (err: unknown) => {
+          if (active && seq === seqRef.current) {
+            setSnapshot({
+              api,
+              sessionId,
+              session: null,
+              error: describeContractError(err) ?? "Could not load the session from the chain.",
+            });
+          }
+        },
+      );
+    };
+    load();
+    const unsubscribe = api.onSessionActivity(sessionId, load);
+    const poll = window.setInterval(load, POLL_MS);
     return () => {
+      active = false;
       unsubscribe();
       window.clearInterval(poll);
     };
-  }, [api, sessionId, refresh]);
+  }, [api, sessionId, tick]);
+
+  const current =
+    snapshot !== null && snapshot.api === api && snapshot.sessionId === sessionId
+      ? snapshot
+      : null;
 
   return {
-    session,
-    loading: session === null && error === null,
-    error,
-    refresh: () => void refresh(),
+    session: current?.session ?? null,
+    loading: current === null,
+    error: current?.error ?? null,
+    refresh,
   };
+}
+
+interface ClaimableSnapshot {
+  api: StakeBeastApi;
+  account: string;
+  claimable: bigint;
 }
 
 /** The connected account's pull-payment claimable balance (wei). */
 export function useClaimable(): { claimable: bigint | null; refresh: () => void } {
   const { api } = useStakeBeast();
   const { account } = useWallet();
-  const [claimable, setClaimable] = useState<bigint | null>(null);
-
-  const refresh = useCallback(async () => {
-    if (!api || !account) return;
-    try {
-      setClaimable(await api.claimableOf(account));
-    } catch {
-      // Read failure (e.g. node hiccup): keep the last value, retry on poll.
-    }
-  }, [api, account]);
-
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
+  const [snapshot, setSnapshot] = useState<ClaimableSnapshot | null>(null);
+  const [tick, setTick] = useState(0);
+  const seqRef = useRef(0);
+  const refresh = useCallback(() => setTick((t) => t + 1), []);
 
   useEffect(() => {
     if (!api || !account) return undefined;
-    const offWithdrawal = api.onWithdrawal(account, () => void refresh());
-    const offCredit = api.onAnyCredit(() => void refresh());
-    const poll = window.setInterval(() => void refresh(), POLL_MS);
+    let active = true;
+    const load = () => {
+      const seq = ++seqRef.current;
+      api.claimableOf(account).then(
+        (claimable) => {
+          if (active && seq === seqRef.current) setSnapshot({ api, account, claimable });
+        },
+        () => {
+          // Read failure (e.g. node hiccup): keep the last value, retry on poll.
+        },
+      );
+    };
+    load();
+    const offWithdrawal = api.onWithdrawal(account, load);
+    const offCredit = api.onAnyCredit(load);
+    const poll = window.setInterval(load, POLL_MS);
     return () => {
+      active = false;
       offWithdrawal();
       offCredit();
       window.clearInterval(poll);
     };
-  }, [api, account, refresh]);
+  }, [api, account, tick]);
 
-  return { claimable, refresh: () => void refresh() };
+  const current =
+    snapshot !== null && snapshot.api === api && snapshot.account === account ? snapshot : null;
+
+  return { claimable: current?.claimable ?? null, refresh };
 }
 
 /** The contract owner (for the admin void entry). null until loaded. */

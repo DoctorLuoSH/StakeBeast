@@ -19,7 +19,9 @@ export interface DecodedRevert {
 
 /**
  * Pull revert data out of the various shapes ethers v6 / MetaMask produce:
- * `error.data`, `error.info.error.data` (string or {data}), nested payloads.
+ * `error.data`, `error.info.error.data` (string or {data}), nested payloads
+ * under `originalError` / `cause`, and object-valued `data` / `result`
+ * wrappers. Cycles are guarded by the `seen` set.
  */
 export function extractRevertData(error: unknown): string | null {
   const seen = new Set<unknown>();
@@ -32,8 +34,11 @@ export function extractRevertData(error: unknown): string | null {
     for (const key of ["data", "result"]) {
       const v = rec[key];
       if (typeof v === "string" && v.startsWith("0x") && v.length >= 10) return v;
+      // Object-valued payload (e.g. MetaMask's { data: { data: "0x…" } }):
+      // descend one more level instead of giving up.
+      if (v !== null && typeof v === "object") queue.push(v);
     }
-    for (const key of ["info", "error", "cause", "payload"]) {
+    for (const key of ["info", "error", "cause", "payload", "originalError"]) {
       if (rec[key] && typeof rec[key] === "object") queue.push(rec[key]);
     }
   }

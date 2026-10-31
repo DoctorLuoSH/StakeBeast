@@ -77,7 +77,8 @@ export interface StakeBeastApi {
   onWithdrawal(account: string, listener: () => void): () => void;
   /**
    * Subscribe to every event that can credit a claimable balance
-   * (completion / cancellation / void). Unfiltered — traffic is tiny.
+   * (completion / cancellation / void / forfeiture — the contract credits
+   * claimable before each of these, StakeBeast.sol). Unfiltered — traffic is tiny.
    */
   onAnyCredit(listener: () => void): () => void;
 }
@@ -224,7 +225,10 @@ export function getStakeBeast(provider: BrowserProvider): StakeBeastApi {
 
     onAnyCredit(listener) {
       const fire = () => listener();
-      const events = ["SessionCompleted", "SessionCancelled", "SessionVoided"];
+      // Every event emitted after the contract credits a claimable balance:
+      // completion, cancellation, void, and forfeiture (admit-defeat route,
+      // timeout to charity, joint co-focus to charity).
+      const events = ["SessionCompleted", "SessionCancelled", "SessionVoided", "SessionForfeited"];
       for (const e of events) void contract.on(e, fire);
       return () => {
         for (const e of events) void contract.off(e, fire);
