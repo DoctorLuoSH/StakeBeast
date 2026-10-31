@@ -14,6 +14,7 @@ import { BeastSprite } from "./BeastSprite";
 import { BeastCard } from "./BeastCard";
 import { resolveZooView } from "./zooView";
 import type { BeastEntry } from "./zooView";
+import { colorIndex } from "./colorway";
 import { EmptyState } from "../states/EmptyState";
 
 /**
@@ -41,7 +42,14 @@ export function ZooShelf({ beasts, demoMode }: ZooShelfProps) {
     return (
       <div className="profile__zoo">
         {beasts.map((b) => (
-          <BeastCard key={b.id} stage={b.stage} tier={b.tier} metric={b.metric} date={b.date} />
+          <BeastCard
+            key={b.id}
+            stage={b.stage}
+            tier={b.tier}
+            metric={b.metric}
+            date={b.date}
+            colorway={b.sessionId !== undefined ? colorIndex(b.sessionId) : undefined}
+          />
         ))}
       </div>
     );
