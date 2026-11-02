@@ -93,6 +93,8 @@ export function CreateSessionPage() {
   // chain genuinely shows no new session (the panel below explains why).
   const [recovering, setRecovering] = useState(false);
   const [createMissHash, setCreateMissHash] = useState<string | null>(null);
+  // Pre-flight failure (no contract code at the configured address).
+  const [preflightError, setPreflightError] = useState<string | null>(null);
 
   const active = MODES.find((m) => m.id === mode)!;
   const isFocusTrack = mode === "solo" || mode === "cofocus" || (mode === "duel" && duelTask === "focus");
@@ -133,11 +135,20 @@ export function CreateSessionPage() {
     self: account,
   });
 
-  const submit = (consent: boolean) => {
+  const submit = async (consent: boolean) => {
     const { errors: next, params } = validateSessionForm(collectValues(consent));
     setErrors(next);
     if (!params || !api) return;
     setCreateMissHash(null);
+    setPreflightError(null);
+    // Pre-flight: sending value to an address without contract code confirms
+    // without creating anything (DAPP-44 root cause) — never send that tx.
+    try {
+      await api.assertDeployed();
+    } catch (err) {
+      setPreflightError((err as Error).message);
+      return;
+    }
     void run(
       () => api.createSession(params),
       async (receipt) => {
@@ -176,13 +187,13 @@ export function CreateSessionPage() {
       setConsentOpen(true);
       return;
     }
-    submit(cofocusConsent);
+    void submit(cofocusConsent);
   };
 
   const onConsentConfirm = () => {
     setCofocusConsent(true);
     setConsentOpen(false);
-    submit(true);
+    void submit(true);
   };
 
   const pending = tx.phase === "pending";
@@ -411,6 +422,12 @@ export function CreateSessionPage() {
           {configError ? (
             <p className="field__error" role="alert">
               {configError}
+            </p>
+          ) : null}
+
+          {preflightError ? (
+            <p className="field__error" role="alert">
+              {preflightError}
             </p>
           ) : null}
 

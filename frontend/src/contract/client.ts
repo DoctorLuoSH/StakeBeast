@@ -26,6 +26,15 @@ export class ContractNotConfiguredError extends Error {
   }
 }
 
+export class ContractNotDeployedError extends Error {
+  constructor(address: string) {
+    super(
+      `No contract code at the configured address ${address} on the current network — the contract is not deployed here (stale VITE_CONTRACT_ADDRESS, or the wallet is on a different network than the deployment). Re-deploy, sync frontend/.env with deployments/localhost.json, and restart the dev server.`,
+    );
+    this.name = "ContractNotDeployedError";
+  }
+}
+
 export function isContractConfigured(): boolean {
   return contractAddress.length > 0;
 }
@@ -71,6 +80,13 @@ export interface StakeBeastApi {
   getCompletedTokenIds(sessionId: bigint): Promise<bigint[]>;
   /** Extract the created session id from a createSession receipt. */
   readCreatedSessionId(receipt: ContractTransactionReceipt): bigint | null;
+  /**
+   * Pre-flight guard for value-bearing writes: resolves when the configured
+   * address holds contract code on the current network, throws
+   * ContractNotDeployedError otherwise. Sending value to a code-less address
+   * confirms without executing anything (DAPP-44 root cause) — check first.
+   */
+  assertDeployed(): Promise<void>;
   /** Subscribe to every session-lifecycle event for one id. Returns unsubscribe. */
   onSessionActivity(sessionId: bigint, listener: () => void): () => void;
   /** Subscribe to Withdrawn events for one account. Returns unsubscribe. */
@@ -196,6 +212,11 @@ export function getStakeBeast(provider: BrowserProvider): StakeBeastApi {
         }
       }
       return null;
+    },
+
+    async assertDeployed() {
+      const code = await provider.getCode(contractAddress);
+      if (code === "0x") throw new ContractNotDeployedError(contractAddress);
     },
 
     onSessionActivity(sessionId, listener) {

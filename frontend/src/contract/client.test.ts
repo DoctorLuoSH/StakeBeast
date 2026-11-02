@@ -40,9 +40,9 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-async function buildApi() {
+async function buildApi(provider: Partial<BrowserProvider> = {}) {
   const { getStakeBeast } = await import("./client");
-  return getStakeBeast({} as BrowserProvider);
+  return getStakeBeast(provider as BrowserProvider);
 }
 
 describe("onAnyCredit (B6)", () => {
@@ -127,5 +127,19 @@ describe("readCreatedSessionId (DAPP-44)", () => {
     expect(api.readCreatedSessionId(receiptWith([]))).toBeNull();
     const foreign = { topics: ["0x".concat("ab".repeat(32))], data: "0x" };
     expect(api.readCreatedSessionId(receiptWith([foreign]))).toBeNull();
+  });
+});
+
+describe("assertDeployed (DAPP-44)", () => {
+  it("throws ContractNotDeployedError when the address holds no code", async () => {
+    const { ContractNotDeployedError } = await import("./client");
+    const api = await buildApi({ getCode: async () => "0x" });
+    await expect(api.assertDeployed()).rejects.toBeInstanceOf(ContractNotDeployedError);
+    await expect(api.assertDeployed()).rejects.toThrow(/No contract code/);
+  });
+
+  it("resolves when the address holds contract code", async () => {
+    const api = await buildApi({ getCode: async () => "0x60006000" });
+    await expect(api.assertDeployed()).resolves.toBeUndefined();
   });
 });
