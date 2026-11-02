@@ -118,8 +118,14 @@ export function deriveActions(
   return a;
 }
 
-/** Human-readable description of where a forfeited stake went. */
-export function forfeitDestinationLabel(s: Session, reason: number | null): string {
+/**
+ * Human-readable description of where a forfeited stake went. Call only with
+ * a confirmed forfeit reason (from the SessionForfeited log): while the
+ * reason is unconfirmed the UI must show loading/unknown with a retry —
+ * guessing the admit-defeat route would misreport a timeout forfeit, which
+ * pays charity regardless of the preset payee (D6 / AC-03).
+ */
+export function forfeitDestinationLabel(s: Session, reason: number): string {
   if (s.mode === Mode.CoFocus || reason === 2) {
     return "both stakes went to charity under joint liability";
   }

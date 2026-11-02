@@ -120,6 +120,20 @@ describe("validateSessionForm — payee routes (R6)", () => {
     expect(ok.params?.customPayee).toBe(FRED);
   });
 
+  it("blocks the zero address as a custom payee before any transaction (CustomPayeeZero mirror)", () => {
+    const zero = validateSessionForm(base({ mode: "solo", payee: "custom", customPayee: ZeroAddress }));
+    expect(zero.errors.customPayee).toMatch(/zero address/);
+    expect(zero.params).toBeNull();
+  });
+
+  it("blocks the zero address as the supervised verifier (VerifierRequired mirror)", () => {
+    const zero = validateSessionForm(base({ mode: "supervised", counterparty: ZeroAddress }));
+    expect(zero.errors.counterparty).toMatch(/zero address/);
+    expect(zero.params).toBeNull();
+    // Legitimate addresses still pass.
+    expect(validateSessionForm(base({ mode: "supervised", counterparty: BOB })).errors).toEqual({});
+  });
+
   it("co-focus is forced to charity (CoFocusPayeeNotCharity mirror)", () => {
     // Even if a stale payee selection lingers, co-focus params pin Charity.
     const ok = validateSessionForm(base({ mode: "cofocus", cofocusConsent: true, payee: "custom", customPayee: FRED }));

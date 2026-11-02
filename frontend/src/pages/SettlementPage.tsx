@@ -221,21 +221,39 @@ function tierStage(tier: number): "sprout" | "young" | "adult" | "golden" {
 }
 
 
+/**
+ * The forfeit reason read from the SessionForfeited log: "loading" until the
+ * read settles, "unknown" when the log cannot be confirmed (RPC error, or the
+ * event not indexed yet) — retryable, and never presented as a guessed
+ * payout destination — "confirmed" only with the on-chain reason code.
+ */
+type ForfeitReason =
+  | { status: "loading" }
+  | { status: "unknown" }
+  | { status: "confirmed"; reason: number };
+
 function ForfeitedCard({ session, sessionId }: { session: Session; sessionId: bigint }) {
   const { api } = useStakeBeast();
-  const [reason, setReason] = useState<number | null>(null);
+  const [forfeitReason, setForfeitReason] = useState<ForfeitReason>({ status: "loading" });
+  const [tick, setTick] = useState(0);
   useEffect(() => {
     let cancelled = false;
-    api
-      ?.getForfeitReason(sessionId)
-      .then((r) => {
-        if (!cancelled) setReason(r);
-      })
-      .catch(() => undefined);
+    if (!api) return undefined;
+    api.getForfeitReason(sessionId).then(
+      (r) => {
+        if (cancelled) return;
+        setForfeitReason(
+          r === null ? { status: "unknown" } : { status: "confirmed", reason: r },
+        );
+      },
+      () => {
+        if (!cancelled) setForfeitReason({ status: "unknown" });
+      },
+    );
     return () => {
       cancelled = true;
     };
-  }, [api, sessionId]);
+  }, [api, sessionId, tick]);
 
   const mood: BeastMood = "fled";
   return (
@@ -245,8 +263,33 @@ function ForfeitedCard({ session, sessionId }: { session: Session; sessionId: bi
         <div>
           <h2>The beast ran away</h2>
           <p className="muted">
-            Failed sessions mint no NFT — {forfeitDestinationLabel(session, reason)}.
+            Failed sessions mint no NFT
+            {forfeitReason.status === "confirmed"
+              ? ` — ${forfeitDestinationLabel(session, forfeitReason.reason)}.`
+              : "."}
           </p>
+          {forfeitReason.status === "loading" ? (
+            <p className="muted">Confirming the forfeit destination from the chain log…</p>
+          ) : null}
+          {forfeitReason.status === "unknown" ? (
+            <div role="alert">
+              <p className="muted">
+                Could not confirm where the stake went — the SessionForfeited
+                log is unavailable (node lag or an RPC error). The destination
+                is final on-chain; retry to read it instead of guessing.
+              </p>
+              <button
+                type="button"
+                className="button button--ghost"
+                onClick={() => {
+                  setForfeitReason({ status: "loading" });
+                  setTick((t) => t + 1);
+                }}
+              >
+                Retry reading the log
+              </button>
+            </div>
+          ) : null}
         </div>
       </div>
     </section>
