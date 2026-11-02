@@ -7,6 +7,7 @@
 
 import { WalletGate } from "../components/wallet/WalletGate";
 import { ZooShelf } from "../components/beast/ZooShelf";
+import { MySessions } from "../components/session/MySessions";
 import type { BeastEntry } from "../components/beast/zooView";
 import "./ProfilePage.css";
 
@@ -40,6 +41,15 @@ export function ProfilePage() {
               <span className="muted">{s.label}</span>
             </div>
           ))}
+        </section>
+
+        <section className="card">
+          <h2>My sessions</h2>
+          <p className="muted">
+            Every session this wallet created or joined, newest first — your
+            way back into an in-flight session.
+          </p>
+          <MySessions />
         </section>
 
         <section className="card">

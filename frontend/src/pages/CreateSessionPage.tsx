@@ -7,7 +7,7 @@
 
 import { useState } from "react";
 import type { FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { WalletGate } from "../components/wallet/WalletGate";
 import { TxStatusBanner } from "../components/tx/TxStatusBanner";
 import { useTx } from "../components/tx/useTx";
@@ -88,6 +88,11 @@ export function CreateSessionPage() {
   const [cofocusConsent, setCofocusConsent] = useState(false);
   const [consentOpen, setConsentOpen] = useState(false);
   const [errors, setErrors] = useState<SessionFormErrors>({});
+  // Recovery path when a confirmed create receipt yields no session id:
+  // `recovering` while the on-chain fallback runs, `createMissHash` when the
+  // chain genuinely shows no new session (the panel below explains why).
+  const [recovering, setRecovering] = useState(false);
+  const [createMissHash, setCreateMissHash] = useState<string | null>(null);
 
   const active = MODES.find((m) => m.id === mode)!;
   const isFocusTrack = mode === "solo" || mode === "cofocus" || (mode === "duel" && duelTask === "focus");
@@ -132,11 +137,34 @@ export function CreateSessionPage() {
     const { errors: next, params } = validateSessionForm(collectValues(consent));
     setErrors(next);
     if (!params || !api) return;
+    setCreateMissHash(null);
     void run(
       () => api.createSession(params),
-      (receipt) => {
+      async (receipt) => {
+        // Primary: the SessionCreated log carries the new id.
         const id = api.readCreatedSessionId(receipt);
-        if (id !== null) navigate(`/focus/${id}`);
+        if (id !== null) {
+          navigate(`/focus/${id}`);
+          return;
+        }
+        // Fallback: the contract also records every session under the staker
+        // (sessionsOf), so a receipt whose logs are missing/unreadable must
+        // not strand the user. The read also separates "session exists, logs
+        // lost" from "no contract code at the configured address" (the read
+        // itself fails then, or returns nothing).
+        setRecovering(true);
+        try {
+          const ids = account ? await api.sessionsOf(account) : [];
+          const last = ids.length > 0 ? ids[ids.length - 1] : null;
+          if (last !== null) {
+            navigate(`/focus/${last}`);
+            return;
+          }
+        } catch {
+          // Read failed — fall through to the recovery panel below.
+        }
+        setRecovering(false);
+        setCreateMissHash(receipt.hash);
       },
     );
   };
@@ -158,6 +186,7 @@ export function CreateSessionPage() {
   };
 
   const pending = tx.phase === "pending";
+  const busy = pending || recovering;
 
   return (
     <WalletGate>
@@ -387,8 +416,34 @@ export function CreateSessionPage() {
 
           <TxStatusBanner tx={tx} actionLabel="Stake" />
 
-          <button type="submit" className="button" disabled={pending || !api}>
-            {pending ? "Staking…" : "Stake & Create"}
+          {recovering ? (
+            <p className="muted" role="status">
+              Locating the new session on-chain…
+            </p>
+          ) : null}
+
+          {createMissHash ? (
+            <div className="create__miss" role="alert">
+              <strong>
+                Stake confirmed, but no session was found at the configured contract.
+              </strong>
+              <p className="muted">
+                The receipt holds no SessionCreated event and your account shows no new
+                session on this network — the app is almost certainly pointed at a contract
+                address that does not exist on the chain your wallet is connected to (the
+                local node was restarted, or VITE_CONTRACT_ADDRESS is stale). Re-deploy,
+                sync <code>frontend/.env</code> with <code>deployments/localhost.json</code>,
+                restart the dev server, then confirm via My sessions on your profile.
+              </p>
+              <p className="muted mono">Transaction: {createMissHash}</p>
+              <Link className="button button--ghost" to="/profile">
+                Open My sessions
+              </Link>
+            </div>
+          ) : null}
+
+          <button type="submit" className="button" disabled={busy || !api}>
+            {pending ? "Staking…" : recovering ? "Locating…" : "Stake & Create"}
           </button>
         </form>
 

@@ -14,7 +14,8 @@ import type { WalletContextValue } from "../wallet/walletContext";
 import { CreateSessionPage } from "./CreateSessionPage";
 
 const CREATE_SESSION = vi.fn();
-const READ_CREATED_ID = vi.fn(() => 7n);
+const READ_CREATED_ID = vi.fn((): bigint | null => 7n);
+const SESSIONS_OF = vi.fn();
 
 vi.mock("../contract/useStakeBeast", () => ({
   useStakeBeast: () => ({
@@ -22,6 +23,7 @@ vi.mock("../contract/useStakeBeast", () => ({
       address: "0x00000000000000000000000000000000000000aa",
       createSession: CREATE_SESSION,
       readCreatedSessionId: READ_CREATED_ID,
+      sessionsOf: SESSIONS_OF,
     },
     configError: null,
   }),
@@ -64,7 +66,7 @@ function selectMode(title: string) {
 function mockResolvedTx() {
   CREATE_SESSION.mockResolvedValue({
     hash: "0xdeadbeef",
-    wait: async () => ({ logs: [] }),
+    wait: async () => ({ hash: "0xdeadbeef", logs: [] }),
   });
 }
 
@@ -72,6 +74,7 @@ afterEach(() => {
   cleanup();
   CREATE_SESSION.mockReset();
   READ_CREATED_ID.mockClear();
+  SESSIONS_OF.mockReset();
 });
 
 describe("CreateSessionPage validation", () => {
@@ -142,5 +145,46 @@ describe("CreateSessionPage happy path", () => {
     expect(input.durationMinutes).toBe(30);
     expect(input.stakeWei).toBe(10_000_000_000_000_000n);
     expect(await screen.findByText("landed on session 7")).toBeTruthy();
+    // The receipt parsed — the on-chain fallback must stay untouched.
+    expect(SESSIONS_OF).not.toHaveBeenCalled();
+  });
+});
+
+describe("CreateSessionPage confirmation recovery (DAPP-44)", () => {
+  it("falls back to sessionsOf when the receipt yields no session id", async () => {
+    mockResolvedTx();
+    READ_CREATED_ID.mockReturnValueOnce(null);
+    SESSIONS_OF.mockResolvedValue([3n, 7n]);
+    renderPage();
+    fireEvent.click(screen.getByRole("button", { name: /Stake & Create/ }));
+    expect(CREATE_SESSION).toHaveBeenCalledTimes(1);
+    // The newest recorded session is the one just created.
+    expect(await screen.findByText("landed on session 7")).toBeTruthy();
+    expect(SESSIONS_OF).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("shows the recovery panel with the tx hash when the chain has no new session", async () => {
+    mockResolvedTx();
+    READ_CREATED_ID.mockReturnValueOnce(null);
+    SESSIONS_OF.mockResolvedValue([]);
+    renderPage();
+    fireEvent.click(screen.getByRole("button", { name: /Stake & Create/ }));
+    expect(await screen.findByRole("alert")).toBeTruthy();
+    expect(screen.getByText(/no session was found/)).toBeTruthy();
+    expect(screen.getByText(/0xdeadbeef/)).toBeTruthy();
+    expect(screen.getByRole("link", { name: /Open My sessions/ })).toBeTruthy();
+    // Still on the create page — no navigation happened.
+    expect(screen.queryByText(/landed on session/)).toBeNull();
+  });
+
+  it("shows the same panel when the fallback read fails (no code at the address)", async () => {
+    mockResolvedTx();
+    READ_CREATED_ID.mockReturnValueOnce(null);
+    SESSIONS_OF.mockRejectedValue(new Error("could not decode result data (value=\"0x\")"));
+    renderPage();
+    fireEvent.click(screen.getByRole("button", { name: /Stake & Create/ }));
+    expect(await screen.findByText(/no session was found/)).toBeTruthy();
+    expect(screen.queryByText(/landed on session/)).toBeNull();
   });
 });
