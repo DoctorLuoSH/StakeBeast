@@ -471,7 +471,12 @@ async function main() {
     await shot(alicePage, "15-cofocus-waiting-partner");
 
     await gotoApp(bobPage, `/focus/${coId}`);
-    await clickAndConfirm(bobPage, /Join & stake/);
+    // Joiner-side joint-liability consent (DAPP-42): the join tx only sends
+    // after the modal confirmation.
+    await bobPage.getByRole("button", { name: /Join & stake/ }).click();
+    await bobPage.getByText(/Joint liability — please confirm/).waitFor({ timeout: 60_000 });
+    await shot(bobPage, "15b-cofocus-join-consent");
+    await clickAndConfirm(bobPage, /I understand/);
     await shot(bobPage, "16-cofocus-joined-handshake");
     await clickAndConfirm(bobPage, /Confirm start/);
     await alicePage.reload();
