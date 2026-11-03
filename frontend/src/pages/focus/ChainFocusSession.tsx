@@ -28,6 +28,7 @@ import type { UseTx } from "../../components/tx/useTx";
 import { TxStatusBanner } from "../../components/tx/TxStatusBanner";
 import { BeastSprite } from "../../components/beast/BeastSprite";
 import type { BeastMood } from "../../components/beast/BeastSprite";
+import { CheckInPanel } from "../../components/social/CheckInPanel";
 import { CountdownTimer } from "../../components/CountdownTimer";
 import { EmptyState } from "../../components/states/EmptyState";
 import { shortAddress } from "../../lib/format";
@@ -419,6 +420,7 @@ function PendingPhase({ session, sessionId, actions, nowSec, refresh, txRunner, 
 
 function ActiveSession({ session, sessionId, actions, nowSec, refresh, txRunner, proof }: PhaseProps) {
   const { api } = useStakeBeast();
+  const { account } = useWallet();
   const { tx, run } = txRunner;
   const [confirmAdmit, setConfirmAdmit] = useState(false);
   const pending = tx.phase === "pending";
@@ -456,12 +458,22 @@ function ActiveSession({ session, sessionId, actions, nowSec, refresh, txRunner,
   return (
     <>
       <section className="card focus__stage">
-        <BeastSprite
-          stage="young"
-          mood={mood}
-          progress={progress}
-          size={220}
-        />
+        {session.mode === Mode.CoFocus ? (
+          <CoFocusDuo
+            session={session}
+            progress={progress}
+            mood={mood}
+            proof={proof}
+            account={account}
+          />
+        ) : (
+          <BeastSprite
+            stage="young"
+            mood={mood}
+            progress={progress}
+            size={220}
+          />
+        )}
         {!windowOver ? (
           <CountdownTimer targetMs={endMs} label="Remaining" onElapsed={refresh} />
         ) : (
@@ -654,6 +666,10 @@ function ActiveSession({ session, sessionId, actions, nowSec, refresh, txRunner,
         </div>
       </section>
 
+      {!machine && !!account && session.staker.toLowerCase() === account.toLowerCase() ? (
+        <CheckInPanel session={session} sessionId={sessionId} />
+      ) : null}
+
       {session.mode === Mode.Duel && session.linkedSessionId > 0n ? (
         <LinkedDuelPosition linkedId={session.linkedSessionId} />
       ) : null}
@@ -815,6 +831,85 @@ function LinkedDuelPosition({ linkedId }: { linkedId: bigint }) {
       </div>
       <TxStatusBanner tx={tx} actionLabel="Verify" />
     </section>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Co-focus dual view (P2, baseline §4.7)                              */
+/* ------------------------------------------------------------------ */
+
+type DuoDot = "tracking" | "stale" | "unbound" | "violation";
+
+const DUO_DOT_LABEL: Record<DuoDot, string> = {
+  tracking: "tracking",
+  stale: "heartbeat stale",
+  unbound: "not bound",
+  violation: "violation",
+};
+
+/** Freshness bound mirrors the service tolerance (D2: 15 s). */
+const HEARTBEAT_FRESH_MS = 15_000;
+
+function participantDot(
+  p: { bound: boolean; lastHeartbeatAt: string | null; violation: string | null } | undefined,
+  nowMs: number,
+): DuoDot {
+  if (!p || !p.bound) return "unbound";
+  if (p.violation) return "violation";
+  if (p.lastHeartbeatAt && nowMs - Date.parse(p.lastHeartbeatAt) <= HEARTBEAT_FRESH_MS) {
+    return "tracking";
+  }
+  return "stale";
+}
+
+/**
+ * The co-focus duo: both participants' beasts grow side by side over the
+ * shared window (joint fate — one mood for both), each seat carrying the
+ * partner-status dot driven by the attester's participants[] payload
+ * (api-contract §B). Before this client binds, only addresses are known.
+ */
+function CoFocusDuo({
+  session,
+  progress,
+  mood,
+  proof,
+  account,
+}: {
+  session: Session;
+  progress: number;
+  mood: BeastMood;
+  proof: UseProofTracking;
+  account: string | null;
+}) {
+  // 5 s cadence is enough for the heartbeat-freshness dot (D2's 15 s window).
+  const nowMs = useNow(5000);
+  const isStaker = !!account && account.toLowerCase() === session.staker.toLowerCase();
+  const ownAddress = account;
+  const partnerAddress = isStaker ? session.partner : session.staker;
+
+  const seat = (label: string, address: string | null) => {
+    const p = address
+      ? proof.state.participants.find((x) => x.address.toLowerCase() === address.toLowerCase())
+      : undefined;
+    const dot = participantDot(p, nowMs);
+    return (
+      <div className="focus__duo-seat">
+        <BeastSprite stage="young" mood={mood} progress={progress} size={140} />
+        <span className="focus__duo-label">
+          {label} {address ? <span className="muted mono">{shortAddress(address)}</span> : null}
+        </span>
+        <span className={`focus__duo-dot focus__duo-dot--${dot}`}>
+          ● {DUO_DOT_LABEL[dot]}
+        </span>
+      </div>
+    );
+  };
+
+  return (
+    <div className="focus__duo">
+      {seat("You", ownAddress)}
+      {seat("Partner", partnerAddress)}
+    </div>
   );
 }
 

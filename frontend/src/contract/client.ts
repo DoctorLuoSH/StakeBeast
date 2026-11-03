@@ -65,6 +65,7 @@ export interface StakeBeastApi {
   startSession(sessionId: bigint): Promise<ContractTransactionResponse>;
   cancelPending(sessionId: bigint): Promise<ContractTransactionResponse>;
   settle(sessionId: bigint, signature: string): Promise<ContractTransactionResponse>;
+  checkIn(sessionId: bigint, evidenceHash: string): Promise<ContractTransactionResponse>;
   verify(sessionId: bigint): Promise<ContractTransactionResponse>;
   admitDefeat(sessionId: bigint): Promise<ContractTransactionResponse>;
   forfeit(sessionId: bigint): Promise<ContractTransactionResponse>;
@@ -76,6 +77,8 @@ export interface StakeBeastApi {
   owner(): Promise<string>;
   /** Forfeit reason from the SessionForfeited log (0 admit / 1 timeout / 2 joint); null when none. */
   getForfeitReason(sessionId: bigint): Promise<number | null>;
+  /** Parsed CheckedIn anchors for one session, oldest first (R8 evidence). */
+  listCheckedIn(sessionId: bigint): Promise<CheckedInRecord[]>;
   /** Token ids minted by the SessionCompleted log; empty when none. */
   getCompletedTokenIds(sessionId: bigint): Promise<bigint[]>;
   /** Extract the created session id from a createSession receipt. */
@@ -97,6 +100,15 @@ export interface StakeBeastApi {
    * claimable before each of these, StakeBeast.sol). Unfiltered — traffic is tiny.
    */
   onAnyCredit(listener: () => void): () => void;
+}
+
+/** One parsed CheckedIn log: the on-chain evidence anchor (api-contract A.3). */
+export interface CheckedInRecord {
+  evidenceHash: string;
+  periodIndex: number;
+  staker: string;
+  txHash: string;
+  blockNumber: number;
 }
 
 /** Build the client over a wallet provider. Throws when the address is unset. */
@@ -145,6 +157,10 @@ export function getStakeBeast(provider: BrowserProvider): StakeBeastApi {
       return (await writable()).settle(sessionId, signature) as Promise<ContractTransactionResponse>;
     },
 
+    async checkIn(sessionId, evidenceHash) {
+      return (await writable()).checkIn(sessionId, evidenceHash) as Promise<ContractTransactionResponse>;
+    },
+
     async verify(sessionId) {
       return (await writable()).verify(sessionId) as Promise<ContractTransactionResponse>;
     },
@@ -187,6 +203,26 @@ export function getStakeBeast(provider: BrowserProvider): StakeBeastApi {
       const last = logs[logs.length - 1];
       const decoded = stakeBeastInterface.parseLog({ topics: [...last.topics], data: last.data });
       return decoded ? Number(decoded.args.reason) : null;
+    },
+
+    async listCheckedIn(sessionId) {
+      const logs = await contract.queryFilter(contract.filters.CheckedIn(sessionId));
+      const records: CheckedInRecord[] = [];
+      for (const log of logs) {
+        const decoded = stakeBeastInterface.parseLog({
+          topics: [...log.topics],
+          data: log.data,
+        });
+        if (!decoded) continue;
+        records.push({
+          evidenceHash: String(decoded.args.evidenceHash).toLowerCase(),
+          periodIndex: Number(decoded.args.periodIndex),
+          staker: String(decoded.args.staker),
+          txHash: log.transactionHash,
+          blockNumber: log.blockNumber,
+        });
+      }
+      return records;
     },
 
     async getCompletedTokenIds(sessionId) {

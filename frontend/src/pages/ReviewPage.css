@@ -1,0 +1,58 @@
+/* ReviewPage styles (supervisor review, baseline §4.5) */
+
+.review {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.review__item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.review__head {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+}
+
+.review__head h2 {
+  margin: 0;
+}
+
+.review__avatar {
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.review__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.review__evidence {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.review__checkin {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+  padding: 0.5rem 0;
+  border-top: 1px solid var(--color-line, #e2e8f0);
+}
+
+.review__verdict--ok {
+  color: var(--color-primary-deep);
+  font-weight: 600;
+}
+
+.review__verdict--bad {
+  color: var(--color-danger, #c0392b);
+  font-weight: 600;
+}

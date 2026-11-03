@@ -4,97 +4,41 @@
  * linking to its focus page. This is the recovery entry when a create
  * confirmation never reaches the focus page: anything the chain holds for
  * this wallet is listed here, and a read failure surfaces as a retryable
- * error instead of an empty list (DAPP-44).
+ * error instead of an empty list (DAPP-44). Reads flow through the shared
+ * useAccountSessions hook (one snapshot identity rule as useSession).
  */
 
-import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useWallet } from "../../wallet/useWallet";
 import { useStakeBeast } from "../../contract/useStakeBeast";
-import { describeContractError } from "../../contract/errors";
-import type { StakeBeastApi } from "../../contract/client";
+import { useAccountSessions } from "../../contract/useAccountSessions";
 import { MODE_LABEL, STATUS_LABEL } from "../../contract/types";
-import type { Session } from "../../contract/types";
 import { taskLabel } from "../../contract/sessionView";
 import { EmptyState } from "../states/EmptyState";
-
-interface SessionRow {
-  id: bigint;
-  session: Session;
-}
-
-/**
- * Snapshot keyed to the exact request identity (api instance + account), so
- * a late response from a previous account/network can never overwrite the
- * current view (same race rule as useSession in useStakeBeast).
- */
-interface Snapshot {
-  api: StakeBeastApi;
-  account: string;
-  rows: SessionRow[] | null;
-  error: string | null;
-}
 
 export function MySessions() {
   const { api } = useStakeBeast();
   const { account } = useWallet();
-  const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
-  const [tick, setTick] = useState(0);
-
-  useEffect(() => {
-    if (!api || !account) return undefined;
-    let active = true;
-    void (async () => {
-      try {
-        const ids = await api.sessionsOf(account);
-        const rows = await Promise.all(
-          ids.map(async (id) => ({ id, session: await api.getSession(id) })),
-        );
-        if (active) setSnapshot({ api, account, rows: rows.reverse(), error: null });
-      } catch (err) {
-        if (active) {
-          setSnapshot({
-            api,
-            account,
-            rows: null,
-            error:
-              describeContractError(err) ?? "Could not load your sessions from the chain.",
-          });
-        }
-      }
-    })();
-    return () => {
-      active = false;
-    };
-  }, [api, account, tick]);
-
-  const current =
-    snapshot !== null && snapshot.api === api && snapshot.account === account
-      ? snapshot
-      : null;
+  const { rows, loading, error, refresh } = useAccountSessions();
 
   if (!api || !account) return null;
 
-  if (current === null) {
+  if (loading) {
     return <p className="muted">Loading your sessions…</p>;
   }
 
-  if (current.error !== null) {
+  if (error !== null) {
     return (
       <div role="alert">
-        <p className="field__error">{current.error}</p>
-        <button
-          type="button"
-          className="button button--ghost"
-          onClick={() => setTick((t) => t + 1)}
-        >
+        <p className="field__error">{error}</p>
+        <button type="button" className="button button--ghost" onClick={refresh}>
           Retry
         </button>
       </div>
     );
   }
 
-  if (current.rows === null || current.rows.length === 0) {
+  if (rows === null || rows.length === 0) {
     return (
       <EmptyState
         icon="🧭"
@@ -111,7 +55,7 @@ export function MySessions() {
 
   return (
     <ul className="profile__sessions">
-      {current.rows.map(({ id, session }) => (
+      {rows.map(({ id, session }) => (
         <li key={id.toString()}>
           <Link to={`/focus/${id.toString()}`}>
             #{id.toString()} · {MODE_LABEL[session.mode]} ·{" "}

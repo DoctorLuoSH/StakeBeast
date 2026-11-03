@@ -73,6 +73,20 @@ The script starts and stops its own Hardhat node, attester and dev server,
 and deploys a contract instance with demo-sized windows (join 90 s, start
 90 s, grace 120 s) so the whole run takes roughly twelve minutes.
 
+`scripts/ui-social-walkthrough.mjs` covers the social layer and the personal
+homepage (DAPP-47) against the same harness plus the social backend:
+wallet-signature sign-in, profile edit (nickname + avatar), a supervised
+check-in (photo upload → SHA-256 anchor on-chain → backend-confirmed), the
+supervisor review list (original bytes re-hashed vs. the on-chain anchor →
+"anchored & matching" → on-chain verify), a mutual-bet evidence
+cross-confirmation, the co-focus dual side-by-side view, and the My Zoo
+homepage with real record stats and mints:
+
+```bash
+# additionally: npm --prefix backend install && npm --prefix backend run build
+node scripts/ui-social-walkthrough.mjs   # screenshots → ./walkthrough-social-shots/
+```
+
 ## Project layout
 
 ```
