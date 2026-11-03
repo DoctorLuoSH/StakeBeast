@@ -2,6 +2,10 @@
  * Create-session form validation — the client-side mirror of the contract's
  * createSession guards (frozen baseline R6 combination validation), so users
  * get field-level human-readable feedback before any transaction is sent.
+ * One gate is deliberately stricter than the contract: per the member final
+ * ruling of 2026-11-03 (DAPP-51) a duel must name a concrete non-zero
+ * opponent at creation (no open-challenge entry this term). Front-end only —
+ * contract behaviour is unchanged.
  * Pure module: unit-tested without a chain.
  */
 
@@ -132,11 +136,18 @@ export function validateSessionForm(v: SessionFormValues): ValidatedSessionForm 
         v.mode === "supervised" ? "A supervised session needs a supervisor address." : "A mutual bet needs an opponent address.";
     } else if (!isAddress(cp)) {
       errors.counterparty = "Enter a valid 0x address.";
-    } else if (v.mode === "supervised" && cp.toLowerCase() === ZeroAddress) {
-      // The contract rejects a zero verifier with VerifierRequired — block it
-      // before any transaction. (Duel zero-opponent routing is unchanged, see
-      // the frozen baseline.)
-      errors.counterparty = "The zero address cannot supervise a session — enter a concrete supervisor address.";
+    } else if (cp.toLowerCase() === ZeroAddress) {
+      // Supervised: the contract rejects a zero verifier with VerifierRequired
+      // — block it before any transaction. Duel: member final ruling
+      // 2026-11-03 (DAPP-51) tightens the creation entry — no open (unnamed
+      // opponent) mutual bet is offered this term, so the form demands a
+      // concrete non-zero opponent up front. This is a front-end gate only:
+      // the contract still allows a zero opponent on-chain, and joining an
+      // existing open duel is unaffected.
+      errors.counterparty =
+        v.mode === "supervised"
+          ? "The zero address cannot supervise a session — enter a concrete supervisor address."
+          : "The zero address cannot be your opponent — enter a concrete opponent address.";
     } else if (sameAddress(cp, v.self)) {
       errors.counterparty = "You cannot be your own counterparty — pick a different address.";
     } else {

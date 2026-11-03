@@ -100,6 +100,30 @@ describe("validateSessionForm — task parameter tracks (R6)", () => {
     expect(habit.params?.durationMinutes).toBe(0);
     expect(habit.params?.periodDays).toBe(3);
   });
+
+  it("duel requires a valid non-zero opponent (member ruling 2026-11-03, DAPP-51)", () => {
+    const missing = validateSessionForm(base({ mode: "duel" }));
+    expect(missing.errors.counterparty).toMatch(/opponent address/);
+    expect(missing.params).toBeNull();
+
+    const invalid = validateSessionForm(base({ mode: "duel", counterparty: "0x123" }));
+    expect(invalid.errors.counterparty).toMatch(/valid 0x address/);
+    expect(invalid.params).toBeNull();
+
+    // No open-challenge entry this term: the zero opponent is blocked before
+    // any transaction, even though the contract would still allow it.
+    const zero = validateSessionForm(base({ mode: "duel", counterparty: ZeroAddress }));
+    expect(zero.errors.counterparty).toMatch(/zero address/);
+    expect(zero.params).toBeNull();
+
+    const self = validateSessionForm(base({ mode: "duel", counterparty: ALICE }));
+    expect(self.errors.counterparty).toMatch(/your own counterparty/);
+    expect(self.params).toBeNull();
+
+    const ok = validateSessionForm(base({ mode: "duel", counterparty: BOB }));
+    expect(ok.errors).toEqual({});
+    expect(ok.params?.counterparty).toBe(BOB);
+  });
 });
 
 describe("validateSessionForm — payee routes (R6)", () => {
