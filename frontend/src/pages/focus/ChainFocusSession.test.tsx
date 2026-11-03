@@ -8,6 +8,11 @@
  *
  * B4 (join half) — a zero custom forfeit address on the duel join path is
  * blocked with a field message before any transaction.
+ *
+ * F1 (DAPP-52) — the settlement prompt and the "Session failed" card are
+ * gated on the service-confirmed violation only; a transient localHidden
+ * (hidden event unconfirmed or out of window) never produces a
+ * false-positive failure.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -17,6 +22,7 @@ import { ZeroAddress } from "ethers";
 import { ChainFocusSession } from "./ChainFocusSession";
 import { Mode, Payee, Status } from "../../contract/types";
 import type { Session } from "../../contract/types";
+import type { ProofTrackState } from "../../lib/proofTracker";
 
 const VIEWER = "0x0000000000000000000000000000000000000002";
 const STAKER = "0x0000000000000000000000000000000000000001";
@@ -37,6 +43,12 @@ const mocks = vi.hoisted(() => {
       isExpectedChain: true,
       account: "0x0000000000000000000000000000000000000002",
     },
+    proof: null as {
+      enabled: boolean;
+      state: ProofTrackState;
+      bind: () => Promise<boolean>;
+      notifyStarted: (txHash: string) => void;
+    } | null,
   };
 });
 
@@ -46,6 +58,26 @@ vi.mock("../../contract/client", async (original) => ({
   isContractConfigured: () => true,
   getStakeBeast: () => mocks.api,
 }));
+vi.mock("../../lib/useProofTracking", () => ({
+  useProofTracking: () => mocks.proof,
+}));
+
+/** Track-state fixture with the tracker defaults overridable per test. */
+function trackState(overrides: Partial<ProofTrackState> = {}): ProofTrackState {
+  return {
+    phase: "tracking",
+    lifecycle: "monitoring",
+    violation: false,
+    localHidden: false,
+    attestationReady: false,
+    uncertifiable: false,
+    unreachable: false,
+    error: null,
+    lastAckSeq: 12,
+    participants: [],
+    ...overrides,
+  };
+}
 
 function pendingSession(overrides: Partial<Session> = {}): Session {
   return {
@@ -90,6 +122,13 @@ beforeEach(() => {
     hash: "0x1234",
     wait: async () => ({ logs: [] }),
   });
+  // Default: tracking disabled — only the F1 block enables it per test.
+  mocks.proof = {
+    enabled: false,
+    state: trackState(),
+    bind: async () => false,
+    notifyStarted: () => {},
+  };
 });
 
 afterEach(() => {
@@ -191,5 +230,61 @@ describe("duel join path — no joint dialog, zero-address guard (B4)", () => {
 
     expect(mocks.api.joinSession).toHaveBeenCalledTimes(1);
     expect(mocks.api.joinSession).toHaveBeenCalledWith(1n, Payee.Custom, FRIEND, STAKE);
+  });
+});
+
+describe("F1 — settlement gate uses only the service-confirmed violation", () => {
+  const nowSec = () => Math.floor(Date.now() / 1000);
+
+  /** Active solo session whose window has already ended. */
+  const endedSession = () =>
+    pendingSession({
+      mode: Mode.SoloFocus,
+      status: Status.Active,
+      staker: VIEWER,
+      startDeadline: nowSec() - 700,
+      startTime: nowSec() - 660,
+      endTime: nowSec() - 60,
+      settlementDeadline: nowSec() + 3600,
+      joined: true,
+    });
+
+  const enableProof = (state: Partial<ProofTrackState>) => {
+    mocks.proof = {
+      enabled: true,
+      state: trackState(state),
+      bind: async () => true,
+      notifyStarted: () => {},
+    };
+  };
+
+  it("unconfirmed hidden event + attestationReady: settlement prompt appears, no false 'Session failed'", async () => {
+    mocks.api.getSession.mockResolvedValue(endedSession());
+    enableProof({ attestationReady: true, localHidden: true, lifecycle: "clean" });
+    renderSession();
+
+    expect(await screen.findByText("Coverage verified — settle the session")).toBeTruthy();
+    expect(screen.getByRole("link", { name: /Go to settlement/ })).toBeTruthy();
+    expect(screen.queryByText("Session failed")).toBeNull();
+  });
+
+  it("transient hidden signal while finalizing: no 'Session failed', no settlement entry yet", async () => {
+    mocks.api.getSession.mockResolvedValue(endedSession());
+    enableProof({ localHidden: true });
+    renderSession();
+
+    expect(await screen.findByText(/Finalizing coverage/)).toBeTruthy();
+    expect(screen.queryByText("Session failed")).toBeNull();
+    // The transient warning card still shows (its sanctioned role).
+    expect(screen.getByText("Violation flagged")).toBeTruthy();
+  });
+
+  it("service-confirmed violation past the window: 'Session failed' and no settlement entry", async () => {
+    mocks.api.getSession.mockResolvedValue(endedSession());
+    enableProof({ violation: true, lifecycle: "violation" });
+    renderSession();
+
+    expect(await screen.findByText("Session failed")).toBeTruthy();
+    expect(screen.queryByRole("link", { name: /Go to settlement/ })).toBeNull();
   });
 });
