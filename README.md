@@ -192,8 +192,9 @@ Notepad's *Save as…*, it may quietly append `.txt`, leaving
 `attester/.env.txt` — which the service cannot find, so boot fails with a
 missing-config error. Windows Explorer also hides extensions by default, so a
 file displayed as `.env` may really be `.env.txt`. Check with `dir attester`
-or `dir backend`; if you spot the extra suffix, rename the file
-(`Rename-Item attester\.env.txt attester\.env`), or in Notepad's save dialog
+or `dir backend`; if you spot the extra suffix, rename the file with
+`Rename-Item attester\.env.txt -NewName .env` (PowerShell 5.1 rejects a path
+as the new name — pass the bare leaf name), or in Notepad's save dialog
 choose *Save as type: All files*.
 
 Edit with any plain-text editor (Notepad is fine: `notepad attester\.env`).
