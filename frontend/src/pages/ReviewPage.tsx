@@ -194,9 +194,13 @@ function ReviewItemCard({
   const [expanded, setExpanded] = useState(false);
   const [logs, setLogs] = useState<CheckedInRecord[] | null>(null);
   const [logsError, setLogsError] = useState<string | null>(null);
+  // DAPP-55 F2: once OUR verify confirms on-chain the session is Completed,
+  // but the backend mirror can keep serving stale Active for its TTL — a
+  // second click would be a guaranteed revert (wasted gas). Mark it locally.
+  const [confirmedLocal, setConfirmedLocal] = useState(false);
   const { tx, run } = useTx();
 
-  const active = item.onchain.status === Status.Active;
+  const active = !confirmedLocal && item.onchain.status === Status.Active;
   const deadline = item.onchain.settlementDeadline;
   const canVerify =
     active && deadline !== null && nowSec < deadline && api !== null && account !== null;
@@ -214,8 +218,15 @@ function ReviewItemCard({
   };
 
   const doVerify = () => {
-    if (!api) return;
-    void run(() => api.verify(BigInt(item.sessionId)), onVerified, "Verify");
+    if (!api || confirmedLocal) return;
+    void run(
+      () => api.verify(BigInt(item.sessionId)),
+      () => {
+        setConfirmedLocal(true);
+        onVerified();
+      },
+      "Verify",
+    );
   };
 
   return (

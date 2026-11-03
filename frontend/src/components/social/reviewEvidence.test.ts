@@ -21,7 +21,7 @@ function record(overrides: Partial<CheckinRecord> = {}): CheckinRecord {
     createdAt: "2026-11-03T00:00:00Z",
     photoUrl: "/api/media/c1",
     thumbUrl: "/api/media/c1?variant=thumb",
-    onchain: { status: "confirmed", txHash: "0xtx", blockNumber: "12" },
+    onchain: { status: "confirmed", txHash: "0xtx", blockNumber: "12", failReason: null },
     ...overrides,
   };
 }
@@ -63,7 +63,7 @@ describe("verdictFor", () => {
   it("anchor-failed when the backend marked the anchor failed (even with an event)", () => {
     const check = verdictFor(
       HASH,
-      record({ onchain: { status: "failed", txHash: "0xtx", blockNumber: "12" } }),
+      record({ onchain: { status: "failed", txHash: "0xtx", blockNumber: "12", failReason: "event_mismatch" } }),
       [log()],
     );
     expect(check.verdict).toBe("anchor-failed");
@@ -72,7 +72,7 @@ describe("verdictFor", () => {
   it("anchor-pending while the reported tx is not yet confirmed", () => {
     const check = verdictFor(
       HASH,
-      record({ onchain: { status: "pending", txHash: "0xtx", blockNumber: null } }),
+      record({ onchain: { status: "pending", txHash: "0xtx", blockNumber: null, failReason: null } }),
       [log()],
     );
     expect(check.verdict).toBe("anchor-pending");

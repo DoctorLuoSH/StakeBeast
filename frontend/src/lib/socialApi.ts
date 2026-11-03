@@ -103,10 +103,20 @@ export interface LoginChallenge {
 
 export type AnchorStatus = "pending" | "confirmed" | "failed";
 
+/**
+ * Why an anchor failed chain verification (DAPP-55 F1). `period_mismatch`
+ * means the period rolled over after upload, so the on-chain event can never
+ * match the record's immutable periodIndex — re-anchoring is a dead end and
+ * the UI must steer the user to re-upload instead.
+ */
+export type AnchorFailReason = "tx_reverted" | "period_mismatch" | "event_mismatch";
+
 export interface CheckinOnchain {
   status: AnchorStatus;
   txHash: string | null;
   blockNumber: string | null;
+  /** Set only while status = "failed". */
+  failReason: AnchorFailReason | null;
 }
 
 export interface CheckinRecord {

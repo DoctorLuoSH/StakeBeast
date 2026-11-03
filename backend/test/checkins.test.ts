@@ -51,7 +51,7 @@ test('upload stores the photo byte-identical and content-addressed; the hash mat
   assert.equal(item.createdAt, r.json.createdAt);
   assert.equal(item.photoUrl, `/api/media/${item.checkinId}`);
   assert.equal(item.thumbUrl, `/api/media/${item.checkinId}?variant=thumb`);
-  assert.deepEqual(item.onchain, { status: 'pending', txHash: null, blockNumber: null });
+  assert.deepEqual(item.onchain, { status: 'pending', txHash: null, blockNumber: null, failReason: null });
 });
 
 test('evidenceHash mismatch with the received bytes is 422 hash_mismatch', async (t) => {

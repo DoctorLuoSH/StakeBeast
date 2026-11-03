@@ -18,8 +18,8 @@ import { AbiCoder, getAddress } from 'ethers';
 import multer from 'multer';
 import sharp from 'sharp';
 import { CHECKED_IN_TOPIC } from './chain/abi';
-import type { ChainLog } from './chain/gateway';
-import type { CheckinRow } from './db';
+import type { ChainLog, ChainReceipt } from './chain/gateway';
+import type { AnchorFailReason, CheckinRow } from './db';
 import { ApiError, asyncHandler } from './errors';
 import { resolveParties } from './parties';
 import { requireAuth } from './auth';
@@ -35,6 +35,8 @@ function onchainOf(row: CheckinRow) {
     txHash: row.anchor_tx_hash,
     // On-chain numeric fields are decimal strings (api-contract line 28).
     blockNumber: row.anchor_block_number == null ? null : String(row.anchor_block_number),
+    // Why the anchor failed chain verification (DAPP-55 F1); null otherwise.
+    failReason: row.anchor_status === 'failed' ? row.anchor_fail_reason : null,
   };
 }
 
@@ -68,29 +70,51 @@ function parseCheckinFields(body: Record<string, unknown> | undefined) {
   return { sessionId, evidenceHash, periodIndex };
 }
 
-/** Does this receipt log prove the anchor of `row` by `caller`? */
-function matchesCheckedIn(
+/**
+ * How a receipt log relates to the anchor of `row` by `caller`:
+ * 'match' proves the anchor; 'period_mismatch' means everything matches except
+ * the periodIndex (the period rolled over after upload — DAPP-55 F1);
+ * 'unrelated' covers anything else.
+ */
+function classifyCheckedInLog(
   log: ChainLog,
   contractAddress: string,
   row: CheckinRow,
   caller: string,
-): boolean {
+): 'match' | 'period_mismatch' | 'unrelated' {
   try {
     // Must be emitted by the expected StakeBeast contract — not any contract.
-    if (getAddress(log.address) !== getAddress(contractAddress)) return false;
-    if (log.topics.length < 3) return false;
-    if (log.topics[0].toLowerCase() !== CHECKED_IN_TOPIC.toLowerCase()) return false;
-    if (BigInt(log.topics[1]).toString() !== row.session_id) return false;
+    if (getAddress(log.address) !== getAddress(contractAddress)) return 'unrelated';
+    if (log.topics.length < 3) return 'unrelated';
+    if (log.topics[0].toLowerCase() !== CHECKED_IN_TOPIC.toLowerCase()) return 'unrelated';
+    if (BigInt(log.topics[1]).toString() !== row.session_id) return 'unrelated';
     if (getAddress(`0x${log.topics[2].slice(26)}`).toLowerCase() !== caller.toLowerCase()) {
-      return false;
+      return 'unrelated';
     }
     const [hash, period] = AbiCoder.defaultAbiCoder().decode(['bytes32', 'uint16'], log.data);
-    if (String(hash).toLowerCase() !== row.evidence_hash) return false;
-    if (Number(period) !== row.period_index) return false;
-    return true;
+    if (String(hash).toLowerCase() !== row.evidence_hash) return 'unrelated';
+    if (Number(period) !== row.period_index) return 'period_mismatch';
+    return 'match';
   } catch {
-    return false;
+    return 'unrelated';
   }
+}
+
+/** Verify the reported anchor tx against the chain, naming why it failed. */
+function verifyAnchorReceipt(
+  receipt: ChainReceipt,
+  contractAddress: string,
+  row: CheckinRow,
+  caller: string,
+): { matched: boolean; failReason: AnchorFailReason | null } {
+  if (receipt.status !== 1) return { matched: false, failReason: 'tx_reverted' };
+  let sawPeriodMismatch = false;
+  for (const log of receipt.logs) {
+    const cls = classifyCheckedInLog(log, contractAddress, row, caller);
+    if (cls === 'match') return { matched: true, failReason: null };
+    if (cls === 'period_mismatch') sawPeriodMismatch = true;
+  }
+  return { matched: false, failReason: sawPeriodMismatch ? 'period_mismatch' : 'event_mismatch' };
 }
 
 export function checkinRoutes(ctx: Ctx): Router {
@@ -155,6 +179,7 @@ export function checkinRoutes(ctx: Ctx): Router {
         anchor_status: 'pending',
         anchor_tx_hash: null,
         anchor_block_number: null,
+        anchor_fail_reason: null,
       });
       res.status(201).json({ checkinId, createdAt });
     }),
@@ -184,18 +209,21 @@ export function checkinRoutes(ctx: Ctx): Router {
         // No receipt yet: persist the reported hash as the current pending
         // attempt, superseding any older one, so POST and GET agree. The
         // client re-POSTs the same hash once it mines to settle the anchor.
-        ctx.db.updateAnchor(row.checkin_id, 'pending', txHash, null);
-        res.json({ ok: false, onchain: { status: 'pending', txHash, blockNumber: null } });
+        ctx.db.updateAnchor(row.checkin_id, 'pending', txHash, null, null);
+        res.json({ ok: false, onchain: { status: 'pending', txHash, blockNumber: null, failReason: null } });
         return;
       }
-      const matched =
-        receipt.status === 1 &&
-        receipt.logs.some((log) => matchesCheckedIn(log, ctx.config.contractAddress, row, caller));
+      const { matched, failReason } = verifyAnchorReceipt(
+        receipt,
+        ctx.config.contractAddress,
+        row,
+        caller,
+      );
       const status = matched ? 'confirmed' : 'failed';
-      ctx.db.updateAnchor(row.checkin_id, status, txHash, receipt.blockNumber);
+      ctx.db.updateAnchor(row.checkin_id, status, txHash, receipt.blockNumber, failReason);
       res.json({
         ok: matched,
-        onchain: { status, txHash, blockNumber: String(receipt.blockNumber) },
+        onchain: { status, txHash, blockNumber: String(receipt.blockNumber), failReason },
       });
     }),
   );

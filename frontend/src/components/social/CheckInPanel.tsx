@@ -289,6 +289,11 @@ function CheckinRow({
       : row.onchain.status === "failed"
         ? { cls: "checkins__badge--bad", text: "anchor failed" }
         : { cls: "checkins__badge--pending", text: "anchor pending" };
+  // DAPP-55 F1: a period_mismatch failure is a dead end — the period rolled
+  // over after upload, so no re-anchor tx can ever match the record's
+  // immutable periodIndex. Hide the button and steer to a fresh upload.
+  const periodMismatch =
+    row.onchain.status === "failed" && row.onchain.failReason === "period_mismatch";
 
   return (
     <div className="checkins__row">
@@ -305,9 +310,15 @@ function CheckinRow({
         {row.onchain.txHash ? (
           <span className="muted mono">tx {shortAddress(row.onchain.txHash, 10, 8)}</span>
         ) : null}
+        {periodMismatch ? (
+          <span className="field__error" role="alert">
+            The check-in window for period {row.periodIndex} has rolled over, so this record can
+            never anchor. Please re-upload the photo as a new check-in.
+          </span>
+        ) : null}
       </div>
       <span className={`checkins__badge ${badge.cls}`}>{badge.text}</span>
-      {row.onchain.status !== "confirmed" ? (
+      {row.onchain.status !== "confirmed" && !periodMismatch ? (
         <button
           type="button"
           className="button button--ghost"
