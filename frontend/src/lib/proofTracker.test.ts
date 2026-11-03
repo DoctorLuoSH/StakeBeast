@@ -246,6 +246,57 @@ describe("ProofTracker", () => {
     expect(h.calls.events).toHaveLength(0);
   });
 
+  // DAPP-52 F1: localHidden is transient only — it clears when the service
+  // declines to confirm the violation, and on the return-to-foreground.
+  it("a hidden event the service does not confirm clears the transient warning", async () => {
+    const h = harness({ event: async () => ({ violation: false }) });
+    await h.tracker.bind();
+    h.tracker.reportHidden();
+    await waitFor(() => h.calls.events.length === 1);
+    await waitFor(() => !h.latest().localHidden);
+    expect(h.latest().violation).toBe(false);
+    h.tracker.stop();
+  });
+
+  it("reportVisible clears the transient warning; a confirmed violation never clears", async () => {
+    // Event pending: the return to the foreground clears the local signal.
+    const pending = harness({ event: async () => new Promise(() => {}) });
+    await pending.tracker.bind();
+    pending.tracker.reportHidden();
+    await waitFor(() => pending.latest().localHidden);
+    pending.tracker.reportVisible();
+    expect(pending.latest().localHidden).toBe(false);
+    pending.tracker.stop();
+
+    // Confirmed violation: permanent.
+    const confirmed = harness({ event: async () => ({ violation: true }) });
+    await confirmed.tracker.bind();
+    confirmed.tracker.reportHidden();
+    await waitFor(() => confirmed.latest().violation);
+    confirmed.tracker.reportVisible();
+    await sleep(CADENCE * 2);
+    expect(confirmed.latest().violation).toBe(true);
+    confirmed.tracker.stop();
+  });
+
+  it("unconfirmed hidden event followed by attestationReady: no false-positive failure", async () => {
+    const h = harness({
+      event: async () => ({ violation: false }),
+      status: async () => makeStatus({ lifecycle: "clean", attestationReady: true }),
+    });
+    await h.tracker.bind();
+    h.tracker.reportHidden();
+    // Deterministic order: the event response clears the transient first,
+    // the status poll then lands the clean judgment.
+    await waitFor(() => h.calls.events.length === 1);
+    await waitFor(() => !h.latest().localHidden);
+    await waitFor(() => h.latest().phase === "ended");
+    expect(h.latest().violation).toBe(false);
+    expect(h.latest().localHidden).toBe(false);
+    expect(h.latest().attestationReady).toBe(true);
+    h.tracker.stop();
+  });
+
   it("bind failure returns false, keeps phase unbound and carries the reason", async () => {
     let state: ProofTrackState = INITIAL_TRACK_STATE;
     const tracker = createProofTracker({

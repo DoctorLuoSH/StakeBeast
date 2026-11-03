@@ -432,16 +432,20 @@ function ActiveSession({ session, sessionId, actions, nowSec, refresh, txRunner,
   const progress = Math.min(1, Math.max(0, (nowMs - startMs) / windowMs));
   const windowOver = nowSec >= session.endTime;
 
-  // Proof state (service-confirmed where available): the violation flag and
-  // the settlement prompt come from the attester, not from local inference.
+  // Proof state: the settlement prompt and the failure card are gated on the
+  // service-confirmed violation ONLY (DAPP-52 F1) — `localHidden` is a
+  // transient pre-confirmation signal and may show the warning card, but it
+  // never gates settlement: an out-of-window or unconfirmed hidden event must
+  // not stick the page on "Session failed".
   const machine = isMachineProof(session.mode);
-  const violated = proof.enabled && (proof.state.violation || proof.state.localHidden);
+  const warned = proof.enabled && (proof.state.violation || proof.state.localHidden);
+  const violated = proof.enabled && proof.state.violation;
   const failed = windowOver && violated;
   const attestationReady = proof.enabled && proof.state.attestationReady;
 
   const mood: BeastMood = failed
     ? "fled"
-    : violated
+    : warned
       ? "warning"
       : windowOver
         ? "happy"
@@ -545,7 +549,7 @@ function ActiveSession({ session, sessionId, actions, nowSec, refresh, txRunner,
         </section>
       ) : null}
 
-      {violated && !failed ? (
+      {warned && !failed ? (
         <section className="card focus__warning" role="alert">
           <h3>Violation flagged</h3>
           <p>

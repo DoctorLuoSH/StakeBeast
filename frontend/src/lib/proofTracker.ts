@@ -28,7 +28,11 @@ export interface ProofTrackState {
   lifecycle: ProofLifecycle | null;
   /** Service-confirmed violation (permanent). */
   violation: boolean;
-  /** Local hidden signal, shown before the service confirms the event. */
+  /**
+   * Transient local hidden signal (pre-confirmation warning only — DAPP-52
+   * F1: it never gates the settlement prompt or the failure card). Cleared
+   * when the tab returns or the service declines to confirm the violation.
+   */
   localHidden: boolean;
   /** Clean coverage confirmed — the attestation can be fetched. */
   attestationReady: boolean;
@@ -304,7 +308,13 @@ export function createProofTracker(opts: ProofTrackerOptions): ProofTracker {
       void client
         .event(crypto.randomUUID(), "visibility_hidden")
         .then(({ violation }) => {
-          if (violation) markViolation();
+          if (violation) {
+            markViolation();
+          } else {
+            // The service declined to confirm a violation (e.g. the event
+            // landed outside the window): the transient warning clears.
+            state = { ...state, localHidden: false };
+          }
           emit();
         })
         .catch((err) => {
@@ -315,6 +325,12 @@ export function createProofTracker(opts: ProofTrackerOptions): ProofTracker {
 
     reportVisible() {
       if (!client || stopped) return;
+      // Back in the foreground before any confirmation: the transient
+      // warning clears (a confirmed violation, once set, never clears).
+      if (state.localHidden) {
+        state = { ...state, localHidden: false };
+        emit();
+      }
       void client
         .event(crypto.randomUUID(), "visibility_visible")
         .then(() => emit())
