@@ -165,7 +165,8 @@ describe("CreateSessionPage duel opponent (member ruling 2026-11-03, DAPP-51/DAP
     const submitButton = screen.getByRole("button", { name: /Stake & Create/ }) as HTMLButtonElement;
     expect(submitButton.disabled).toBe(false);
     fireEvent.click(submitButton);
-    expect(CREATE_SESSION).toHaveBeenCalledTimes(1);
+    // submit is async (pre-flight check) — the call lands on the next tick.
+    await waitFor(() => expect(CREATE_SESSION).toHaveBeenCalledTimes(1));
     expect(CREATE_SESSION.mock.calls[0][0].counterparty).toBe(OPPONENT);
     expect(await screen.findByText("landed on session 7")).toBeTruthy();
   });
