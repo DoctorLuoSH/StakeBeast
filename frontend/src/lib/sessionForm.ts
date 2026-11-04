@@ -58,6 +58,55 @@ function sameAddress(a: string, b: string | null): boolean {
   return b !== null && a.toLowerCase() === b.toLowerCase();
 }
 
+export interface CounterpartyCheck {
+  /** Human-readable field error; undefined when the address is usable. */
+  error?: string;
+  /** The checked address when valid, else ZeroAddress. */
+  address: string;
+}
+
+/**
+ * Single-field counterparty check — the same gate `validateSessionForm`
+ * applies, exposed so the form can validate the address field live (on
+ * blur / as the user types) and keep the submit disabled while it is
+ * invalid, instead of only reporting after a submit attempt. Modes without
+ * a counterparty pass through ZeroAddress with no error.
+ */
+export function validateCounterparty(mode: FormMode, raw: string, self: string | null): CounterpartyCheck {
+  if (mode !== "supervised" && mode !== "duel") return { address: ZeroAddress };
+  const cp = raw.trim();
+  if (!cp) {
+    return {
+      error:
+        mode === "supervised" ? "A supervised session needs a supervisor address." : "A mutual bet needs an opponent address.",
+      address: ZeroAddress,
+    };
+  }
+  if (!isAddress(cp)) {
+    return { error: "Enter a valid 0x address.", address: ZeroAddress };
+  }
+  if (cp.toLowerCase() === ZeroAddress) {
+    // Supervised: the contract rejects a zero verifier with VerifierRequired
+    // — block it before any transaction. Duel: member final ruling
+    // 2026-11-03 (DAPP-51) tightens the creation entry — no open (unnamed
+    // opponent) mutual bet is offered this term, so the form demands a
+    // concrete non-zero opponent up front. This is a front-end gate only:
+    // the contract still allows a zero opponent on-chain, and joining an
+    // existing open duel is unaffected.
+    return {
+      error:
+        mode === "supervised"
+          ? "The zero address cannot supervise a session — enter a concrete supervisor address."
+          : "The zero address cannot be your opponent — enter a concrete opponent address.",
+      address: ZeroAddress,
+    };
+  }
+  if (sameAddress(cp, self)) {
+    return { error: "You cannot be your own counterparty — pick a different address.", address: ZeroAddress };
+  }
+  return { address: cp };
+}
+
 export function validateSessionForm(v: SessionFormValues): ValidatedSessionForm {
   const errors: SessionFormErrors = {};
 
@@ -128,32 +177,9 @@ export function validateSessionForm(v: SessionFormValues): ValidatedSessionForm 
   }
 
   // ------------------------------------------------------- counterparty --
-  let counterparty = ZeroAddress;
-  if (v.mode === "supervised" || v.mode === "duel") {
-    const cp = v.counterparty.trim();
-    if (!cp) {
-      errors.counterparty =
-        v.mode === "supervised" ? "A supervised session needs a supervisor address." : "A mutual bet needs an opponent address.";
-    } else if (!isAddress(cp)) {
-      errors.counterparty = "Enter a valid 0x address.";
-    } else if (cp.toLowerCase() === ZeroAddress) {
-      // Supervised: the contract rejects a zero verifier with VerifierRequired
-      // — block it before any transaction. Duel: member final ruling
-      // 2026-11-03 (DAPP-51) tightens the creation entry — no open (unnamed
-      // opponent) mutual bet is offered this term, so the form demands a
-      // concrete non-zero opponent up front. This is a front-end gate only:
-      // the contract still allows a zero opponent on-chain, and joining an
-      // existing open duel is unaffected.
-      errors.counterparty =
-        v.mode === "supervised"
-          ? "The zero address cannot supervise a session — enter a concrete supervisor address."
-          : "The zero address cannot be your opponent — enter a concrete opponent address.";
-    } else if (sameAddress(cp, v.self)) {
-      errors.counterparty = "You cannot be your own counterparty — pick a different address.";
-    } else {
-      counterparty = cp;
-    }
-  }
+  const cpCheck = validateCounterparty(v.mode, v.counterparty, v.self);
+  if (cpCheck.error) errors.counterparty = cpCheck.error;
+  const counterparty = cpCheck.address;
 
   // -------------------------------------------------------------- payee --
   // R6: the verifier route is human-proof only; co-focus is forced to

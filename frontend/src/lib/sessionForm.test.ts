@@ -7,7 +7,7 @@
 import { describe, expect, it } from "vitest";
 import { ZeroAddress } from "ethers";
 import { Mode, Payee } from "../contract/types";
-import { validateSessionForm } from "./sessionForm";
+import { validateCounterparty, validateSessionForm } from "./sessionForm";
 import type { SessionFormValues } from "./sessionForm";
 
 const ALICE = "0x90F8bf6A479f320ead074411a4B0e7944Ea8c9C1";
@@ -32,6 +32,31 @@ function base(overrides: Partial<SessionFormValues> = {}): SessionFormValues {
     ...overrides,
   };
 }
+
+describe("validateCounterparty — live field gate (DAPP-60)", () => {
+  it("passes through modes without a counterparty", () => {
+    expect(validateCounterparty("solo", "", ALICE)).toEqual({ address: ZeroAddress });
+    expect(validateCounterparty("cofocus", "not-an-address", ALICE)).toEqual({ address: ZeroAddress });
+  });
+
+  it("mirrors the duel opponent rules (member ruling 2026-11-03, DAPP-51)", () => {
+    expect(validateCounterparty("duel", "", ALICE).error).toMatch(/opponent address/);
+    expect(validateCounterparty("duel", "0x123", ALICE).error).toMatch(/valid 0x address/);
+    expect(validateCounterparty("duel", ZeroAddress, ALICE).error).toMatch(/zero address/);
+    expect(validateCounterparty("duel", ALICE, ALICE).error).toMatch(/your own counterparty/);
+    expect(validateCounterparty("duel", BOB, ALICE)).toEqual({ address: BOB });
+  });
+
+  it("mirrors the supervised supervisor rules", () => {
+    expect(validateCounterparty("supervised", "", ALICE).error).toMatch(/supervisor address/);
+    expect(validateCounterparty("supervised", ZeroAddress, ALICE).error).toMatch(/zero address/);
+    expect(validateCounterparty("supervised", BOB, ALICE)).toEqual({ address: BOB });
+  });
+
+  it("trims surrounding whitespace before checking", () => {
+    expect(validateCounterparty("duel", `  ${BOB}  `, ALICE)).toEqual({ address: BOB });
+  });
+});
 
 describe("validateSessionForm — stake", () => {
   it("accepts a normal stake", () => {
