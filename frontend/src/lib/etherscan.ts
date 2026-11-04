@@ -1,13 +1,15 @@
 /**
- * Explorer link builders for Sepolia. Pure functions, no wallet state.
+ * Explorer link builders for the expected chain. Pure functions, no wallet
+ * state. Local dev chains have no explorer — builders return "" and callers
+ * hide the link.
  */
 
-import { SEPOLIA_EXPLORER } from "../config/chains";
+import { EXPECTED_CHAIN } from "../config/chains";
 
 export function txExplorerUrl(hash: string): string {
-  return `${SEPOLIA_EXPLORER}/tx/${hash}`;
+  return EXPECTED_CHAIN.explorer ? `${EXPECTED_CHAIN.explorer}/tx/${hash}` : "";
 }
 
 export function addressExplorerUrl(address: string): string {
-  return `${SEPOLIA_EXPLORER}/address/${address}`;
+  return EXPECTED_CHAIN.explorer ? `${EXPECTED_CHAIN.explorer}/address/${address}` : "";
 }

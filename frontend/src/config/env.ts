@@ -35,3 +35,9 @@ export const apiBaseUrl = readEnv("VITE_API_BASE_URL");
 
 /** Optional Sepolia RPC endpoint override (fallbacks to wallet provider). */
 export const sepoliaRpcUrl = readEnv("VITE_SEPOLIA_RPC_URL");
+
+/**
+ * Optional chain id override for the expected network. Leave empty for
+ * Sepolia (default); set to 31337 for a local Hardhat node (see README).
+ */
+export const chainIdOverride = readEnv("VITE_CHAIN_ID");

@@ -1,7 +1,8 @@
 /**
  * Transaction status banner: pending → success / failure feedback with a
- * Sepolia Etherscan link. Pages pass the current tx lifecycle state;
- * failures are classified (rejected / insufficient funds / network / unknown).
+ * block-explorer link when the chain has one. Pages pass the current tx
+ * lifecycle state; failures are classified (rejected / insufficient funds /
+ * network / contract revert / unknown).
  */
 
 import { txExplorerUrl } from "../../lib/etherscan";
@@ -20,6 +21,16 @@ interface TxStatusBannerProps {
   actionLabel?: string;
 }
 
+function ExplorerLink({ hash }: { hash: string }) {
+  const url = txExplorerUrl(hash);
+  if (!url) return <span className="mono">{hash.slice(0, 12)}…</span>;
+  return (
+    <a href={url} target="_blank" rel="noreferrer">
+      View on explorer
+    </a>
+  );
+}
+
 export function TxStatusBanner({ tx, actionLabel = "Transaction" }: TxStatusBannerProps) {
   if (tx.phase === "idle") return null;
 
@@ -29,11 +40,7 @@ export function TxStatusBanner({ tx, actionLabel = "Transaction" }: TxStatusBann
         <span className="tx-banner__spinner" aria-hidden />
         <span>
           {actionLabel} submitted — waiting for confirmation…{" "}
-          {tx.hash ? (
-            <a href={txExplorerUrl(tx.hash)} target="_blank" rel="noreferrer">
-              View on Etherscan
-            </a>
-          ) : null}
+          {tx.hash ? <ExplorerLink hash={tx.hash} /> : null}
         </span>
       </div>
     );
@@ -43,10 +50,7 @@ export function TxStatusBanner({ tx, actionLabel = "Transaction" }: TxStatusBann
     return (
       <div className="tx-banner tx-banner--success" role="status">
         <span>
-          {actionLabel} confirmed.{" "}
-          <a href={txExplorerUrl(tx.hash)} target="_blank" rel="noreferrer">
-            View on Etherscan
-          </a>
+          {actionLabel} confirmed. <ExplorerLink hash={tx.hash} />
         </span>
       </div>
     );

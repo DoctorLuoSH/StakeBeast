@@ -8,6 +8,10 @@
   margin: 0 auto;
 }
 
+.focus__head h1 {
+  margin: 0 0 0.35rem;
+}
+
 .focus__stage {
   display: flex;
   flex-direction: column;
@@ -27,6 +31,29 @@
   text-align: center;
   color: var(--color-primary-deep);
   font-weight: 600;
+}
+
+/* Action rows on the live session view. */
+.focus__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.focus__confirm {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.focus__join {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  border-top: 1px dashed var(--color-border);
+  padding-top: 0.9rem;
 }
 
 /* Growth progress bar under the countdown. */
@@ -130,7 +157,7 @@
   }
 }
 
-/* Demo controls — de-emphasised placeholder until DAPP-4 wiring. */
+/* Demo controls — de-emphasised placeholder until DAPP-35 wiring. */
 .focus__demo {
   font-size: 0.85rem;
   border-style: dashed;
