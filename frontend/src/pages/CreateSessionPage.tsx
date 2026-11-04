@@ -13,7 +13,7 @@ import { TxStatusBanner } from "../components/tx/TxStatusBanner";
 import { useTx } from "../components/tx/useTx";
 import { useStakeBeast } from "../contract/useStakeBeast";
 import { useWallet } from "../wallet/useWallet";
-import { validateSessionForm } from "../lib/sessionForm";
+import { validateCounterparty, validateSessionForm } from "../lib/sessionForm";
 import type {
   DuelTask,
   FormMode,
@@ -82,6 +82,7 @@ export function CreateSessionPage() {
   const [targetCount, setTargetCount] = useState(DEFAULTS.targetCount);
   const [criterion, setCriterion] = useState("");
   const [counterparty, setCounterparty] = useState("");
+  const [counterpartyTouched, setCounterpartyTouched] = useState(false);
   const [payee, setPayee] = useState<PayeeChoice>("charity");
   const [customPayee, setCustomPayee] = useState("");
   const [duelTask, setDuelTask] = useState<DuelTask>("focus");
@@ -108,6 +109,7 @@ export function CreateSessionPage() {
   const onModeChange = (m: FormMode) => {
     setMode(m);
     setErrors({});
+    setCounterpartyTouched(false);
     // Co-focus forfeits always go to charity (R6); keep the select valid.
     if (m === "cofocus") setPayee("charity");
   };
@@ -158,6 +160,16 @@ export function CreateSessionPage() {
   };
 
   const pending = tx.phase === "pending";
+
+  // Duel opponent: live field-level gate per the member ruling (DAPP-51,
+  // DAPP-60). The error shows once the field is touched or a submit was
+  // attempted, and Stake & Create stays disabled while the opponent is
+  // missing or invalid — a bad address can never reach createSession.
+  const duelCounterparty = mode === "duel" ? validateCounterparty(mode, counterparty, account) : null;
+  const counterpartyError =
+    mode === "duel"
+      ? ((counterpartyTouched ? duelCounterparty?.error : undefined) ?? errors.counterparty)
+      : errors.counterparty;
 
   return (
     <WalletGate>
@@ -314,11 +326,15 @@ export function CreateSessionPage() {
                 spellCheck={false}
                 placeholder="0x…"
                 value={counterparty}
-                onChange={(e) => setCounterparty(e.target.value)}
-                aria-invalid={!!errors.counterparty}
+                onChange={(e) => {
+                  setCounterparty(e.target.value);
+                  setCounterpartyTouched(true);
+                }}
+                onBlur={() => setCounterpartyTouched(true)}
+                aria-invalid={!!counterpartyError}
               />
-              {errors.counterparty ? (
-                <small className="field__error">{errors.counterparty}</small>
+              {counterpartyError ? (
+                <small className="field__error">{counterpartyError}</small>
               ) : null}
             </label>
           ) : null}
@@ -387,7 +403,11 @@ export function CreateSessionPage() {
 
           <TxStatusBanner tx={tx} actionLabel="Stake" />
 
-          <button type="submit" className="button" disabled={pending || !api}>
+          <button
+            type="submit"
+            className="button"
+            disabled={pending || !api || !!duelCounterparty?.error}
+          >
             {pending ? "Staking…" : "Stake & Create"}
           </button>
         </form>

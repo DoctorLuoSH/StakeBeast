@@ -112,32 +112,42 @@ describe("CreateSessionPage validation", () => {
   });
 });
 
-describe("CreateSessionPage duel opponent (member ruling 2026-11-03, DAPP-51)", () => {
-  it("blocks a duel with an empty opponent before any transaction", () => {
+describe("CreateSessionPage duel opponent (member ruling 2026-11-03, DAPP-51/DAPP-60)", () => {
+  it("keeps Stake & Create disabled until an opponent address is entered", () => {
     renderPage();
     selectMode("Mutual Bet");
-    fireEvent.click(screen.getByRole("button", { name: /Stake & Create/ }));
+    const submitButton = screen.getByRole("button", { name: /Stake & Create/ }) as HTMLButtonElement;
+    // Required field starts empty → submission is disabled before any click.
+    expect(submitButton.disabled).toBe(true);
+    // The field-level error appears as soon as the field is touched.
+    fireEvent.blur(screen.getByLabelText(/Opponent address/));
     expect(screen.getByText(/needs an opponent address/)).toBeTruthy();
+    fireEvent.click(submitButton);
     expect(CREATE_SESSION).not.toHaveBeenCalled();
   });
 
-  it("blocks a duel with an invalid opponent address before any transaction", () => {
+  it("blocks an invalid opponent address at the field and never sends a transaction", () => {
     renderPage();
     selectMode("Mutual Bet");
     fireEvent.change(screen.getByLabelText(/Opponent address/), { target: { value: "0x123" } });
-    fireEvent.click(screen.getByRole("button", { name: /Stake & Create/ }));
+    // Live field-level feedback without a submit attempt.
     expect(screen.getByText(/valid 0x address/)).toBeTruthy();
+    const submitButton = screen.getByRole("button", { name: /Stake & Create/ }) as HTMLButtonElement;
+    expect(submitButton.disabled).toBe(true);
+    fireEvent.click(submitButton);
     expect(CREATE_SESSION).not.toHaveBeenCalled();
   });
 
-  it("blocks a duel with the zero-address opponent before any transaction", () => {
-    // No open-challenge entry this term: the zero opponent never reaches the
-    // contract call, so no wallet transaction request is triggered either.
+  it("blocks the zero-address opponent at the field and never sends a transaction", () => {
+    // No open-challenge entry this term: the zero opponent keeps the submit
+    // disabled, so no wallet transaction request is triggered either.
     renderPage();
     selectMode("Mutual Bet");
     fireEvent.change(screen.getByLabelText(/Opponent address/), { target: { value: ZERO_ADDRESS } });
-    fireEvent.click(screen.getByRole("button", { name: /Stake & Create/ }));
     expect(screen.getByText(/zero address/)).toBeTruthy();
+    const submitButton = screen.getByRole("button", { name: /Stake & Create/ }) as HTMLButtonElement;
+    expect(submitButton.disabled).toBe(true);
+    fireEvent.click(submitButton);
     expect(CREATE_SESSION).not.toHaveBeenCalled();
   });
 
@@ -146,10 +156,24 @@ describe("CreateSessionPage duel opponent (member ruling 2026-11-03, DAPP-51)", 
     renderPage();
     selectMode("Mutual Bet");
     fireEvent.change(screen.getByLabelText(/Opponent address/), { target: { value: OPPONENT } });
-    fireEvent.click(screen.getByRole("button", { name: /Stake & Create/ }));
+    const submitButton = screen.getByRole("button", { name: /Stake & Create/ }) as HTMLButtonElement;
+    expect(submitButton.disabled).toBe(false);
+    fireEvent.click(submitButton);
     expect(CREATE_SESSION).toHaveBeenCalledTimes(1);
     expect(CREATE_SESSION.mock.calls[0][0].counterparty).toBe(OPPONENT);
     expect(await screen.findByText("landed on session 7")).toBeTruthy();
+  });
+
+  it("clears the opponent error and re-enables submit once the address is fixed", () => {
+    renderPage();
+    selectMode("Mutual Bet");
+    const input = screen.getByLabelText(/Opponent address/);
+    fireEvent.change(input, { target: { value: "0x123" } });
+    expect(screen.getByText(/valid 0x address/)).toBeTruthy();
+    fireEvent.change(input, { target: { value: OPPONENT } });
+    expect(screen.queryByText(/valid 0x address/)).toBeNull();
+    const submitButton = screen.getByRole("button", { name: /Stake & Create/ }) as HTMLButtonElement;
+    expect(submitButton.disabled).toBe(false);
   });
 });
 
