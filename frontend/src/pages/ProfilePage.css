@@ -25,9 +25,83 @@
   color: var(--color-primary-deep);
 }
 
+.profile__stat-sub {
+  font-size: 0.8rem;
+}
+
 .profile__zoo {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 1rem;
   margin: 0.75rem 0 0.5rem;
+}
+
+.profile__sessions {
+  list-style: none;
+  padding: 0;
+  margin: 0.75rem 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+/* Social identity card (signed-in profile editor) */
+
+.profile__identity {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.profile__avatar {
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.profile__identity-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.profile__identity-main h2 {
+  margin: 0;
+}
+
+.profile__identity-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.profile__nickname-edit {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.profile__avatar-upload {
+  cursor: pointer;
+}
+
+/* Social sign-in card (signed-in summary strip) */
+
+.social-signin {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.social-signin__avatar {
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.social-signin__who {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
 }

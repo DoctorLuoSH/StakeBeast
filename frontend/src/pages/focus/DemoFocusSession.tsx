@@ -1,8 +1,8 @@
 /**
  * DemoFocusSession — placeholder 2-minute session exercising the beast
  * animation pipeline (growth / violation / flee) without a chain. The live
- * session view is ChainFocusSession; the settlement hint here stays local
- * until the proof-state wiring lands (DAPP-35, see TODO below).
+ * session view is ChainFocusSession (proof-tracker wired, DAPP-35); this
+ * demo intentionally keeps its local simulation on the bare /focus route.
  */
 
 import { useEffect, useState } from "react";
@@ -31,8 +31,8 @@ export function DemoFocusSession() {
   const endMs = startMs + DEMO_DURATION_MS;
   const progress = Math.min(1, Math.max(0, (now - startMs) / DEMO_DURATION_MS));
 
-  // Violation signal (visual half): hiding the tab flags a violation. The
-  // attester-side marking arrives with the proof-service wiring (DAPP-35).
+  // Violation signal (demo-local): hiding the tab flags a violation. Live
+  // sessions report the event to the attester instead (DAPP-35).
   useEffect(() => {
     const onVisibility = () => {
       if (document.hidden) setViolated(true);
@@ -86,10 +86,9 @@ export function DemoFocusSession() {
             </p>
             {/* A violated session can never receive a completion proof, so
                 the submit-to-settle hint must not appear once a violation
-                is flagged — even after the window ends (DAPP-29).
-                TODO(DAPP-35): drive this settlement hint from the proof state
-                confirmed by the attestation service instead of the local
-                elapsed / violated inference. */}
+                is flagged — even after the window ends (DAPP-29). Live
+                sessions drive this gate from the attester-confirmed proof
+                state (DAPP-35); the demo keeps the local inference. */}
             {elapsed && !violated ? (
               <p className="focus__done">
                 Session window complete — submit the attestation to settle
@@ -139,8 +138,7 @@ export function DemoFocusSession() {
       <section className="card focus__demo muted">
         <h3>Demo controls</h3>
         <p>
-          Placeholder session (2 min) exercising the animation pipeline until
-          the proof-service wiring lands (DAPP-35).
+          Placeholder session (2 min) exercising the animation pipeline.
         </p>
         <div className="focus__demo-buttons">
           <button

@@ -1,0 +1,65 @@
+[
+  {
+    "name": "red",
+    "body": "#F49B90",
+    "shade": "#D97064",
+    "belly": "#FBD3CC",
+    "feature": "#B54A40",
+    "line": "#22312A",
+    "glow": "rgba(244, 155, 144, 0.55)"
+  },
+  {
+    "name": "orange",
+    "body": "#F7B84E",
+    "shade": "#DE952C",
+    "belly": "#FCE0AC",
+    "feature": "#B06F1D",
+    "line": "#22312A",
+    "glow": "rgba(247, 184, 78, 0.55)"
+  },
+  {
+    "name": "lemon",
+    "body": "#F7EC6B",
+    "shade": "#D9C93A",
+    "belly": "#FBF6B4",
+    "feature": "#A89A2A",
+    "line": "#22312A",
+    "glow": "rgba(247, 236, 107, 0.55)"
+  },
+  {
+    "name": "green",
+    "body": "#8BE04E",
+    "shade": "#66B834",
+    "belly": "#C9F2A4",
+    "feature": "#4E9428",
+    "line": "#22312A",
+    "glow": "rgba(139, 224, 78, 0.55)"
+  },
+  {
+    "name": "cyan",
+    "body": "#62D4C8",
+    "shade": "#3EAEA2",
+    "belly": "#BEF0EA",
+    "feature": "#2B857C",
+    "line": "#22312A",
+    "glow": "rgba(98, 212, 200, 0.55)"
+  },
+  {
+    "name": "blue",
+    "body": "#7EB6F2",
+    "shade": "#5490D6",
+    "belly": "#C5DFFA",
+    "feature": "#3A6AA8",
+    "line": "#22312A",
+    "glow": "rgba(126, 182, 242, 0.55)"
+  },
+  {
+    "name": "purple",
+    "body": "#B794E8",
+    "shade": "#9268CC",
+    "belly": "#E2D2F8",
+    "feature": "#6E4AA0",
+    "line": "#22312A",
+    "glow": "rgba(183, 148, 232, 0.55)"
+  }
+]

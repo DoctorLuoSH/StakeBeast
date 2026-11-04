@@ -23,13 +23,15 @@ interface BeastCardProps {
   metric: string;
   /** Completion date, display-ready (e.g. ISO yyyy-mm-dd). */
   date: string;
+  /** Seven-palette index from `colorIndex(sessionId)`; golden ignores it. */
+  colorway?: number;
 }
 
-export function BeastCard({ stage, tier, metric, date }: BeastCardProps) {
+export function BeastCard({ stage, tier, metric, date, colorway }: BeastCardProps) {
   return (
     <article className={`beast-card beast-card--${tier}`}>
       <div className="beast-card__stage">
-        <BeastSprite stage={stage} tier={tier} mood="minted" progress={1} size={110} />
+        <BeastSprite stage={stage} tier={tier} mood="minted" progress={1} size={110} colorway={colorway} />
       </div>
       <span className={`tier-badge tier-badge--${tier}`}>{TIER_LABEL[tier]}</span>
       <span className="beast-card__metric">{metric}</span>

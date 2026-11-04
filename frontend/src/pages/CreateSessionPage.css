@@ -37,6 +37,20 @@
   padding-left: 0.8rem;
 }
 
+.create__miss {
+  border-left: 3px solid var(--color-danger);
+  padding-left: 0.8rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: flex-start;
+  font-weight: 400;
+}
+
+.create__miss p {
+  margin: 0;
+}
+
 .field {
   display: flex;
   flex-direction: column;

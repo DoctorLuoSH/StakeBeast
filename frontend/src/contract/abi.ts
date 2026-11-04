@@ -13,6 +13,7 @@ export const STAKEBEAST_ABI = [
   "function startSession(uint256 sessionId)",
   "function cancelPending(uint256 sessionId)",
   "function settle(uint256 sessionId, bytes signature)",
+  "function checkIn(uint256 sessionId, bytes32 evidenceHash)",
   "function verify(uint256 sessionId)",
   "function admitDefeat(uint256 sessionId)",
   "function forfeit(uint256 sessionId)",
@@ -38,6 +39,7 @@ export const STAKEBEAST_ABI = [
   "event SessionCancelled(uint256 indexed id, uint8 reason)",
   "event SessionCompleted(uint256 indexed id, address[] beneficiaries, uint256[] tokenIds)",
   "event SessionForfeited(uint256 indexed id, uint8 reason)",
+  "event CheckedIn(uint256 indexed id, address indexed staker, bytes32 evidenceHash, uint16 periodIndex)",
   "event SessionVoided(uint256 indexed id, address indexed by)",
   "event Withdrawn(address indexed account, uint256 amount)",
   // -------------------------------------------------------------- errors --

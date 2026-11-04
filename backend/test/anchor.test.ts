@@ -47,12 +47,17 @@ test('anchor confirmed: correct CheckedIn log from the expected contract', async
   assert.equal(r.status, 200);
   assert.deepEqual(r.json, {
     ok: true,
-    onchain: { status: 'confirmed', txHash: TX, blockNumber: '1500' },
+    onchain: { status: 'confirmed', txHash: TX, blockNumber: '1500', failReason: null },
   });
 
   // The list view shows the confirmed anchor; re-reporting is idempotent.
   const list = await api(f.base, 'GET', '/sessions/1/checkins', { token });
-  assert.deepEqual(list.json[0].onchain, { status: 'confirmed', txHash: TX, blockNumber: '1500' });
+  assert.deepEqual(list.json[0].onchain, {
+    status: 'confirmed',
+    txHash: TX,
+    blockNumber: '1500',
+    failReason: null,
+  });
   const again = await anchor(f.base, token, checkinId, TX);
   assert.equal(again.status, 200);
   assert.equal(again.json.ok, true);
@@ -73,6 +78,7 @@ test('anchor failed: the transaction reverted (status 0)', async (t) => {
   assert.equal(r.json.ok, false);
   assert.equal(r.json.onchain.status, 'failed');
   assert.equal(r.json.onchain.txHash, TX);
+  assert.equal(r.json.onchain.failReason, 'tx_reverted');
 });
 
 test('anchor failed: CheckedIn log from a DIFFERENT contract does not count', async (t) => {
@@ -87,6 +93,7 @@ test('anchor failed: CheckedIn log from a DIFFERENT contract does not count', as
   const r = await anchor(f.base, token, checkinId, TX);
   assert.equal(r.json.ok, false);
   assert.equal(r.json.onchain.status, 'failed');
+  assert.equal(r.json.onchain.failReason, 'event_mismatch');
 });
 
 test('anchor failed: evidenceHash mismatch between log and stored record', async (t) => {
@@ -100,10 +107,14 @@ test('anchor failed: evidenceHash mismatch between log and stored record', async
   const r = await anchor(f.base, token, checkinId, TX);
   assert.equal(r.json.ok, false);
   assert.equal(r.json.onchain.status, 'failed');
+  assert.equal(r.json.onchain.failReason, 'event_mismatch');
 });
 
-test('anchor failed: periodIndex mismatch between log and stored record', async (t) => {
+test('anchor failed: periodIndex mismatch between log and stored record (DAPP-55 F1 cross-day)', async (t) => {
   const { f, staker, token, evidenceHash, checkinId } = await fixtureWithCheckin(t);
+  // The day boundary passed between upload and anchoring: the contract emits
+  // CheckedIn with the CURRENT period (3) while the immutable record says 2.
+  // Re-anchoring this row can never confirm — the reason must say so.
   f.gateway.setCheckedInReceipt(TX, {
     sessionId: '1',
     staker: staker.address,
@@ -113,6 +124,39 @@ test('anchor failed: periodIndex mismatch between log and stored record', async 
   const r = await anchor(f.base, token, checkinId, TX);
   assert.equal(r.json.ok, false);
   assert.equal(r.json.onchain.status, 'failed');
+  assert.equal(r.json.onchain.failReason, 'period_mismatch');
+
+  // The reason is persisted and served on the list endpoint (the frontend
+  // hides the re-anchor button from it), and it is distinct from the other
+  // failure causes ('tx_reverted' / 'event_mismatch').
+  const list = await api(f.base, 'GET', '/sessions/1/checkins', { token });
+  assert.deepEqual(list.json[0].onchain, {
+    status: 'failed',
+    txHash: TX,
+    blockNumber: '1500',
+    failReason: 'period_mismatch',
+  });
+
+  // A fresh re-anchor attempt still supersedes to pending and clears the
+  // reason while unmined; once mined with the rolled-over period it fails
+  // with period_mismatch again — the dead end is reported, not hidden.
+  const TX2 = `0x${'ef'.repeat(32)}`;
+  const pending = await anchor(f.base, token, checkinId, TX2);
+  assert.deepEqual(pending.json.onchain, {
+    status: 'pending',
+    txHash: TX2,
+    blockNumber: null,
+    failReason: null,
+  });
+  f.gateway.setCheckedInReceipt(TX2, {
+    sessionId: '1',
+    staker: staker.address,
+    evidenceHash,
+    periodIndex: 3,
+  });
+  const again = await anchor(f.base, token, checkinId, TX2);
+  assert.equal(again.json.onchain.status, 'failed');
+  assert.equal(again.json.onchain.failReason, 'period_mismatch');
 });
 
 test('anchor failed: log for a different session or a different staker', async (t) => {
@@ -125,6 +169,7 @@ test('anchor failed: log for a different session or a different staker', async (
   });
   const wrongSession = await anchor(f.base, token, checkinId, TX);
   assert.equal(wrongSession.json.onchain.status, 'failed');
+  assert.equal(wrongSession.json.onchain.failReason, 'event_mismatch');
 
   const TX2 = `0x${'cd'.repeat(32)}`;
   f.gateway.setCheckedInReceipt(TX2, {
@@ -135,6 +180,7 @@ test('anchor failed: log for a different session or a different staker', async (
   });
   const wrongStaker = await anchor(f.base, token, checkinId, TX2);
   assert.equal(wrongStaker.json.onchain.status, 'failed');
+  assert.equal(wrongStaker.json.onchain.failReason, 'event_mismatch');
 });
 
 test('anchor stays pending without a receipt, then confirms once mined', async (t) => {
@@ -143,11 +189,16 @@ test('anchor stays pending without a receipt, then confirms once mined', async (
   assert.equal(pending.status, 200);
   assert.deepEqual(pending.json, {
     ok: false,
-    onchain: { status: 'pending', txHash: TX, blockNumber: null },
+    onchain: { status: 'pending', txHash: TX, blockNumber: null, failReason: null },
   });
   // The reported hash is persisted as the current pending attempt: POST and GET agree.
   const list1 = await api(f.base, 'GET', '/sessions/1/checkins', { token });
-  assert.deepEqual(list1.json[0].onchain, { status: 'pending', txHash: TX, blockNumber: null });
+  assert.deepEqual(list1.json[0].onchain, {
+    status: 'pending',
+    txHash: TX,
+    blockNumber: null,
+    failReason: null,
+  });
 
   f.gateway.setCheckedInReceipt(TX, {
     sessionId: '1',
@@ -176,17 +227,27 @@ test('a failed anchor superseded by an unmined retry reads pending, then settles
   const failed = await anchor(f.base, token, checkinId, TX1);
   assert.equal(failed.json.onchain.status, 'failed');
   const list0 = await api(f.base, 'GET', '/sessions/1/checkins', { token });
-  assert.deepEqual(list0.json[0].onchain, { status: 'failed', txHash: TX1, blockNumber: '1500' });
+  assert.deepEqual(list0.json[0].onchain, {
+    status: 'failed',
+    txHash: TX1,
+    blockNumber: '1500',
+    failReason: 'tx_reverted',
+  });
 
   // Retry with a new, not-yet-mined transaction: POST returns pending and the
   // list must agree — not show the old attempt's failed state.
   const pending = await anchor(f.base, token, checkinId, TX2);
   assert.deepEqual(pending.json, {
     ok: false,
-    onchain: { status: 'pending', txHash: TX2, blockNumber: null },
+    onchain: { status: 'pending', txHash: TX2, blockNumber: null, failReason: null },
   });
   const list1 = await api(f.base, 'GET', '/sessions/1/checkins', { token });
-  assert.deepEqual(list1.json[0].onchain, { status: 'pending', txHash: TX2, blockNumber: null });
+  assert.deepEqual(list1.json[0].onchain, {
+    status: 'pending',
+    txHash: TX2,
+    blockNumber: null,
+    failReason: null,
+  });
 
   // Once the replacement mines, re-reporting the same hash settles the anchor.
   f.gateway.setCheckedInReceipt(TX2, {
@@ -199,7 +260,12 @@ test('a failed anchor superseded by an unmined retry reads pending, then settles
   const confirmed = await anchor(f.base, token, checkinId, TX2);
   assert.equal(confirmed.json.ok, true);
   const list2 = await api(f.base, 'GET', '/sessions/1/checkins', { token });
-  assert.deepEqual(list2.json[0].onchain, { status: 'confirmed', txHash: TX2, blockNumber: '1501' });
+  assert.deepEqual(list2.json[0].onchain, {
+    status: 'confirmed',
+    txHash: TX2,
+    blockNumber: '1501',
+    failReason: null,
+  });
 });
 
 test('anchor is staker-only; unknown check-in is 404; malformed txHash is 400', async (t) => {

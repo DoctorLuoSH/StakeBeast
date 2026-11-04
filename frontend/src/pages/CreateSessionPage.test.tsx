@@ -7,14 +7,16 @@
  */
 
 import { describe, expect, it, afterEach, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useParams } from "react-router-dom";
 import { WalletContext } from "../wallet/walletContext";
 import type { WalletContextValue } from "../wallet/walletContext";
 import { CreateSessionPage } from "./CreateSessionPage";
 
 const CREATE_SESSION = vi.fn();
-const READ_CREATED_ID = vi.fn(() => 7n);
+const READ_CREATED_ID = vi.fn((): bigint | null => 7n);
+const SESSIONS_OF = vi.fn();
+const ASSERT_DEPLOYED = vi.fn();
 
 const OPPONENT = "0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc";
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
@@ -25,6 +27,8 @@ vi.mock("../contract/useStakeBeast", () => ({
       address: "0x00000000000000000000000000000000000000aa",
       createSession: CREATE_SESSION,
       readCreatedSessionId: READ_CREATED_ID,
+      sessionsOf: SESSIONS_OF,
+      assertDeployed: ASSERT_DEPLOYED,
     },
     configError: null,
   }),
@@ -67,7 +71,7 @@ function selectMode(title: string) {
 function mockResolvedTx() {
   CREATE_SESSION.mockResolvedValue({
     hash: "0xdeadbeef",
-    wait: async () => ({ logs: [] }),
+    wait: async () => ({ hash: "0xdeadbeef", logs: [] }),
   });
 }
 
@@ -75,6 +79,8 @@ afterEach(() => {
   cleanup();
   CREATE_SESSION.mockReset();
   READ_CREATED_ID.mockClear();
+  SESSIONS_OF.mockReset();
+  ASSERT_DEPLOYED.mockReset();
 });
 
 describe("CreateSessionPage validation", () => {
@@ -165,7 +171,8 @@ describe("CreateSessionPage co-focus consent", () => {
     expect(CREATE_SESSION).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: /I understand/ }));
-    expect(CREATE_SESSION).toHaveBeenCalledTimes(1);
+    // submit is async (pre-flight check) — the call lands on the next tick.
+    await waitFor(() => expect(CREATE_SESSION).toHaveBeenCalledTimes(1));
     // Co-focus is forced to the charity route on-chain (R6).
     expect(CREATE_SESSION.mock.calls[0][0].payee).toBe(0);
     // Success navigates to the new session's focus page.
@@ -180,11 +187,65 @@ describe("CreateSessionPage happy path", () => {
     fireEvent.change(screen.getByLabelText(/Stake amount/), { target: { value: "0.01" } });
     fireEvent.change(screen.getByLabelText(/Focus duration/), { target: { value: "30" } });
     fireEvent.click(screen.getByRole("button", { name: /Stake & Create/ }));
-    expect(CREATE_SESSION).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(CREATE_SESSION).toHaveBeenCalledTimes(1));
     const input = CREATE_SESSION.mock.calls[0][0];
     expect(input.mode).toBe(0);
     expect(input.durationMinutes).toBe(30);
     expect(input.stakeWei).toBe(10_000_000_000_000_000n);
     expect(await screen.findByText("landed on session 7")).toBeTruthy();
+    // The receipt parsed — the on-chain fallback must stay untouched.
+    expect(SESSIONS_OF).not.toHaveBeenCalled();
+  });
+});
+
+describe("CreateSessionPage confirmation recovery (DAPP-44)", () => {
+  it("blocks the stake before sending when no code lives at the configured address", async () => {
+    ASSERT_DEPLOYED.mockRejectedValueOnce(
+      new Error("No contract code at the configured address 0x…aa on the current network."),
+    );
+    renderPage();
+    fireEvent.click(screen.getByRole("button", { name: /Stake & Create/ }));
+    expect(await screen.findByRole("alert")).toBeTruthy();
+    expect(screen.getByText(/No contract code at the configured address/)).toBeTruthy();
+    // The value-bearing transaction must never be sent.
+    expect(CREATE_SESSION).not.toHaveBeenCalled();
+    expect(screen.queryByText(/landed on session/)).toBeNull();
+  });
+
+  it("falls back to sessionsOf when the receipt yields no session id", async () => {
+    mockResolvedTx();
+    READ_CREATED_ID.mockReturnValueOnce(null);
+    SESSIONS_OF.mockResolvedValue([3n, 7n]);
+    renderPage();
+    fireEvent.click(screen.getByRole("button", { name: /Stake & Create/ }));
+    await waitFor(() => expect(CREATE_SESSION).toHaveBeenCalledTimes(1));
+    // The newest recorded session is the one just created.
+    expect(await screen.findByText("landed on session 7")).toBeTruthy();
+    expect(SESSIONS_OF).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("shows the recovery panel with the tx hash when the chain has no new session", async () => {
+    mockResolvedTx();
+    READ_CREATED_ID.mockReturnValueOnce(null);
+    SESSIONS_OF.mockResolvedValue([]);
+    renderPage();
+    fireEvent.click(screen.getByRole("button", { name: /Stake & Create/ }));
+    expect(await screen.findByRole("alert")).toBeTruthy();
+    expect(screen.getByText(/no session was found/)).toBeTruthy();
+    expect(screen.getByText(/0xdeadbeef/)).toBeTruthy();
+    expect(screen.getByRole("link", { name: /Open My sessions/ })).toBeTruthy();
+    // Still on the create page — no navigation happened.
+    expect(screen.queryByText(/landed on session/)).toBeNull();
+  });
+
+  it("shows the same panel when the fallback read fails (no code at the address)", async () => {
+    mockResolvedTx();
+    READ_CREATED_ID.mockReturnValueOnce(null);
+    SESSIONS_OF.mockRejectedValue(new Error("could not decode result data (value=\"0x\")"));
+    renderPage();
+    fireEvent.click(screen.getByRole("button", { name: /Stake & Create/ }));
+    expect(await screen.findByText(/no session was found/)).toBeTruthy();
+    expect(screen.queryByText(/landed on session/)).toBeNull();
   });
 });

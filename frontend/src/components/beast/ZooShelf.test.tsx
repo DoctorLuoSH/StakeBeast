@@ -15,9 +15,7 @@ afterEach(cleanup);
 
 const ONE_BEAST: BeastEntry[] = [
   { id: "real-1", stage: "adult", tier: "adult", metric: "50 min focus", date: "2026-10-19" },
-];
-
-describe("resolveZooView", () => {
+];describe("resolveZooView", () => {
   it("picks shelf when beasts exist, regardless of demo mode", () => {
     expect(resolveZooView(1, false)).toBe("shelf");
     expect(resolveZooView(3, true)).toBe("shelf");
@@ -60,5 +58,23 @@ describe("ZooShelf", () => {
     expect(screen.getByText("50 min focus")).toBeTruthy();
     expect(screen.queryByText(/^Demo shelf:/)).toBeNull();
     expect(screen.queryByText("No beasts yet")).toBeNull();
+  });
+
+  it("colors a real beast by colorIndex(sessionId) (DAPP-31 note 10)", () => {
+    const colored: BeastEntry[] = [
+      { ...ONE_BEAST[0], sessionId: "7" }, // 7 % 7 = 0 → red palette
+    ];
+    const { container } = render(<ZooShelf beasts={colored} demoMode={false} />);
+    const sprite = container.querySelector(".beast-sprite") as HTMLElement;
+    expect(sprite.style.getPropertyValue("--beast-body")).toBe("#F49B90");
+  });
+
+  it("golden beasts stay gold even with a sessionId", () => {
+    const golden: BeastEntry[] = [
+      { id: "real-g", stage: "golden", tier: "golden", metric: "120 min focus", date: "2026-10-20", sessionId: "7" },
+    ];
+    const { container } = render(<ZooShelf beasts={golden} demoMode={false} />);
+    const sprite = container.querySelector(".beast-sprite") as HTMLElement;
+    expect(sprite.style.getPropertyValue("--beast-body")).toBe("");
   });
 });

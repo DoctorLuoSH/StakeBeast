@@ -26,6 +26,15 @@ export class ContractNotConfiguredError extends Error {
   }
 }
 
+export class ContractNotDeployedError extends Error {
+  constructor(address: string) {
+    super(
+      `No contract code at the configured address ${address} on the current network — the contract is not deployed here (stale VITE_CONTRACT_ADDRESS, or the wallet is on a different network than the deployment). Re-deploy, sync frontend/.env with deployments/localhost.json, and restart the dev server.`,
+    );
+    this.name = "ContractNotDeployedError";
+  }
+}
+
 export function isContractConfigured(): boolean {
   return contractAddress.length > 0;
 }
@@ -56,6 +65,7 @@ export interface StakeBeastApi {
   startSession(sessionId: bigint): Promise<ContractTransactionResponse>;
   cancelPending(sessionId: bigint): Promise<ContractTransactionResponse>;
   settle(sessionId: bigint, signature: string): Promise<ContractTransactionResponse>;
+  checkIn(sessionId: bigint, evidenceHash: string): Promise<ContractTransactionResponse>;
   verify(sessionId: bigint): Promise<ContractTransactionResponse>;
   admitDefeat(sessionId: bigint): Promise<ContractTransactionResponse>;
   forfeit(sessionId: bigint): Promise<ContractTransactionResponse>;
@@ -67,10 +77,19 @@ export interface StakeBeastApi {
   owner(): Promise<string>;
   /** Forfeit reason from the SessionForfeited log (0 admit / 1 timeout / 2 joint); null when none. */
   getForfeitReason(sessionId: bigint): Promise<number | null>;
+  /** Parsed CheckedIn anchors for one session, oldest first (R8 evidence). */
+  listCheckedIn(sessionId: bigint): Promise<CheckedInRecord[]>;
   /** Token ids minted by the SessionCompleted log; empty when none. */
   getCompletedTokenIds(sessionId: bigint): Promise<bigint[]>;
   /** Extract the created session id from a createSession receipt. */
   readCreatedSessionId(receipt: ContractTransactionReceipt): bigint | null;
+  /**
+   * Pre-flight guard for value-bearing writes: resolves when the configured
+   * address holds contract code on the current network, throws
+   * ContractNotDeployedError otherwise. Sending value to a code-less address
+   * confirms without executing anything (DAPP-44 root cause) — check first.
+   */
+  assertDeployed(): Promise<void>;
   /** Subscribe to every session-lifecycle event for one id. Returns unsubscribe. */
   onSessionActivity(sessionId: bigint, listener: () => void): () => void;
   /** Subscribe to Withdrawn events for one account. Returns unsubscribe. */
@@ -81,6 +100,15 @@ export interface StakeBeastApi {
    * claimable before each of these, StakeBeast.sol). Unfiltered — traffic is tiny.
    */
   onAnyCredit(listener: () => void): () => void;
+}
+
+/** One parsed CheckedIn log: the on-chain evidence anchor (api-contract A.3). */
+export interface CheckedInRecord {
+  evidenceHash: string;
+  periodIndex: number;
+  staker: string;
+  txHash: string;
+  blockNumber: number;
 }
 
 /** Build the client over a wallet provider. Throws when the address is unset. */
@@ -129,6 +157,10 @@ export function getStakeBeast(provider: BrowserProvider): StakeBeastApi {
       return (await writable()).settle(sessionId, signature) as Promise<ContractTransactionResponse>;
     },
 
+    async checkIn(sessionId, evidenceHash) {
+      return (await writable()).checkIn(sessionId, evidenceHash) as Promise<ContractTransactionResponse>;
+    },
+
     async verify(sessionId) {
       return (await writable()).verify(sessionId) as Promise<ContractTransactionResponse>;
     },
@@ -173,6 +205,26 @@ export function getStakeBeast(provider: BrowserProvider): StakeBeastApi {
       return decoded ? Number(decoded.args.reason) : null;
     },
 
+    async listCheckedIn(sessionId) {
+      const logs = await contract.queryFilter(contract.filters.CheckedIn(sessionId));
+      const records: CheckedInRecord[] = [];
+      for (const log of logs) {
+        const decoded = stakeBeastInterface.parseLog({
+          topics: [...log.topics],
+          data: log.data,
+        });
+        if (!decoded) continue;
+        records.push({
+          evidenceHash: String(decoded.args.evidenceHash).toLowerCase(),
+          periodIndex: Number(decoded.args.periodIndex),
+          staker: String(decoded.args.staker),
+          txHash: log.transactionHash,
+          blockNumber: log.blockNumber,
+        });
+      }
+      return records;
+    },
+
     async getCompletedTokenIds(sessionId) {
       const logs = await contract.queryFilter(contract.filters.SessionCompleted(sessionId));
       if (logs.length === 0) return [];
@@ -196,6 +248,11 @@ export function getStakeBeast(provider: BrowserProvider): StakeBeastApi {
         }
       }
       return null;
+    },
+
+    async assertDeployed() {
+      const code = await provider.getCode(contractAddress);
+      if (code === "0x") throw new ContractNotDeployedError(contractAddress);
     },
 
     onSessionActivity(sessionId, listener) {

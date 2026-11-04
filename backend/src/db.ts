@@ -25,6 +25,17 @@ export interface ChallengeRow {
 
 export type AnchorStatus = 'pending' | 'confirmed' | 'failed';
 
+/**
+ * Why an anchor attempt failed chain verification (DAPP-55 F1):
+ * - tx_reverted: the reported transaction mined with status 0
+ * - period_mismatch: a CheckedIn log matches contract/session/caller/hash but
+ *   carries a different periodIndex — the period rolled over after upload, so
+ *   re-anchoring the same record can never confirm (the row is a dead end)
+ * - event_mismatch: no usable CheckedIn log at all (wrong contract / session /
+ *   caller / evidence hash, or none emitted)
+ */
+export type AnchorFailReason = 'tx_reverted' | 'period_mismatch' | 'event_mismatch';
+
 export interface CheckinRow {
   checkin_id: string;
   session_id: string; // decimal string
@@ -38,6 +49,7 @@ export interface CheckinRow {
   anchor_status: AnchorStatus;
   anchor_tx_hash: string | null;
   anchor_block_number: number | null;
+  anchor_fail_reason: AnchorFailReason | null; // set only while status = 'failed'
 }
 
 export interface MirrorRow {
@@ -81,7 +93,8 @@ CREATE TABLE IF NOT EXISTS checkins (
   created_at TEXT NOT NULL,
   anchor_status TEXT NOT NULL DEFAULT 'pending',
   anchor_tx_hash TEXT,
-  anchor_block_number INTEGER
+  anchor_block_number INTEGER,
+  anchor_fail_reason TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_checkins_session ON checkins(session_id);
 CREATE TABLE IF NOT EXISTS sessions_mirror (
@@ -113,6 +126,11 @@ export class BackendDb {
     this.db = new Database(join(dataDir, 'backend.sqlite'));
     this.db.pragma('journal_mode = WAL');
     this.db.exec(SCHEMA);
+    // Existing databases predate anchor_fail_reason — add the column once.
+    const checkinCols = this.db.prepare('PRAGMA table_info(checkins)').all() as { name: string }[];
+    if (!checkinCols.some((c) => c.name === 'anchor_fail_reason')) {
+      this.db.exec('ALTER TABLE checkins ADD COLUMN anchor_fail_reason TEXT');
+    }
   }
 
   /** Escape hatch for tests (e.g. forcing a challenge to expire). */
@@ -173,8 +191,9 @@ export class BackendDb {
     this.db
       .prepare(
         `INSERT INTO checkins (checkin_id, session_id, staker, period_index, evidence_hash,
-           sha256, ext, content_type, created_at, anchor_status, anchor_tx_hash, anchor_block_number)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           sha256, ext, content_type, created_at, anchor_status, anchor_tx_hash, anchor_block_number,
+           anchor_fail_reason)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         row.checkin_id,
@@ -189,6 +208,7 @@ export class BackendDb {
         row.anchor_status,
         row.anchor_tx_hash,
         row.anchor_block_number,
+        row.anchor_fail_reason,
       );
   }
 
@@ -205,17 +225,23 @@ export class BackendDb {
       .all(sessionId) as CheckinRow[];
   }
 
+  /**
+   * Persist an anchor attempt outcome. `failReason` is stored only for
+   * 'failed' and cleared on pending/confirmed, so the wire shape can expose
+   * the stored value directly.
+   */
   updateAnchor(
     checkinId: string,
     status: AnchorStatus,
     txHash: string | null,
     blockNumber: number | null,
+    failReason: AnchorFailReason | null,
   ): void {
     this.db
       .prepare(
-        'UPDATE checkins SET anchor_status = ?, anchor_tx_hash = ?, anchor_block_number = ? WHERE checkin_id = ?',
+        'UPDATE checkins SET anchor_status = ?, anchor_tx_hash = ?, anchor_block_number = ?, anchor_fail_reason = ? WHERE checkin_id = ?',
       )
-      .run(status, txHash, blockNumber, checkinId);
+      .run(status, txHash, blockNumber, failReason, checkinId);
   }
 
   // ------------------------------------------------------------------

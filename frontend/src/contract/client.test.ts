@@ -13,7 +13,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ErrorFragment, ZeroAddress } from "ethers";
-import type { BrowserProvider } from "ethers";
+import type { BrowserProvider, ContractTransactionReceipt } from "ethers";
 
 const mocks = vi.hoisted(() => ({
   contract: { on: vi.fn(), off: vi.fn() },
@@ -40,9 +40,9 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-async function buildApi() {
+async function buildApi(provider: Partial<BrowserProvider> = {}) {
   const { getStakeBeast } = await import("./client");
-  return getStakeBeast({} as BrowserProvider);
+  return getStakeBeast(provider as BrowserProvider);
 }
 
 describe("onAnyCredit (B6)", () => {
@@ -85,5 +85,61 @@ describe("declared error coverage", () => {
       expect(message, fragment.name).toBeTruthy();
       expect(message, fragment.name).not.toMatch(/^Contract reverted with/);
     }
+  });
+});
+
+describe("readCreatedSessionId (DAPP-44)", () => {
+  async function sessionCreatedLog(id: bigint) {
+    const { stakeBeastInterface } = await import("./client");
+    const fragment = stakeBeastInterface.getEvent("SessionCreated");
+    if (!fragment) throw new Error("SessionCreated missing from the ABI");
+    return stakeBeastInterface.encodeEventLog(fragment, [
+      id,
+      0, // Mode.SoloFocus
+      "0x0000000000000000000000000000000000000001", // staker
+      ZeroAddress, // counterparty
+      50_000_000_000_000_000n, // stake
+      100n, // joinDeadline
+      200n, // startDeadline
+    ]);
+  }
+
+  function receiptWith(logs: { topics: readonly string[]; data: string }[]) {
+    return { logs } as unknown as ContractTransactionReceipt;
+  }
+
+  it("extracts the session id from the SessionCreated log", async () => {
+    const api = await buildApi();
+    const log = await sessionCreatedLog(7n);
+    expect(api.readCreatedSessionId(receiptWith([log]))).toBe(7n);
+  });
+
+  it("skips foreign logs and still finds the id later in the receipt", async () => {
+    const api = await buildApi();
+    const foreign = { topics: ["0x".concat("ab".repeat(32))], data: "0x" };
+    const log = await sessionCreatedLog(9n);
+    expect(api.readCreatedSessionId(receiptWith([foreign, log]))).toBe(9n);
+  });
+
+  it("returns null when the receipt has no SessionCreated log", async () => {
+    const api = await buildApi();
+    // No logs at all — the no-code-at-address signature (DAPP-44 root cause).
+    expect(api.readCreatedSessionId(receiptWith([]))).toBeNull();
+    const foreign = { topics: ["0x".concat("ab".repeat(32))], data: "0x" };
+    expect(api.readCreatedSessionId(receiptWith([foreign]))).toBeNull();
+  });
+});
+
+describe("assertDeployed (DAPP-44)", () => {
+  it("throws ContractNotDeployedError when the address holds no code", async () => {
+    const { ContractNotDeployedError } = await import("./client");
+    const api = await buildApi({ getCode: async () => "0x" });
+    await expect(api.assertDeployed()).rejects.toBeInstanceOf(ContractNotDeployedError);
+    await expect(api.assertDeployed()).rejects.toThrow(/No contract code/);
+  });
+
+  it("resolves when the address holds contract code", async () => {
+    const api = await buildApi({ getCode: async () => "0x60006000" });
+    await expect(api.assertDeployed()).resolves.toBeUndefined();
   });
 });
