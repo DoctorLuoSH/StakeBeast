@@ -15,7 +15,7 @@ machine-attestation (proof) service, the social backend, and the React client.
 - `attester/` — proof service: heartbeat monitoring + EIP-712 completion attestations
 - `backend/` — social backend: wallet login, profiles, habit check-in evidence, review list
 - `frontend/` — React + Vite + Ethers v6 client
-- `docs/` — integration test report and design references
+- `docs/` — services runbook (`runbook.md`), integration test report and design references
 - `.env.example` — root environment template (only needed for Sepolia deployment)
 
 ## Getting started
@@ -246,6 +246,10 @@ key field (or the reverse) fails at boot.
 ### Step 5 — Start the services and health-check them
 
 > Where: two more terminals, repo root · **both stay running.**
+>
+> The full operator guide for both services — startup order, Sepolia
+> configuration, health-check fields, troubleshooting — is
+> [`docs/runbook.md`](docs/runbook.md).
 
 Terminal 3 — proof service:
 

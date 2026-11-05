@@ -78,6 +78,9 @@ npm test                  # unit + integration suite
 npm run dev               # http://localhost:3001, state in ./data
 ```
 
+Operator guide (startup order, Sepolia values, health checks,
+troubleshooting): [`docs/runbook.md`](../docs/runbook.md).
+
 Local demo: run Hardhat with interval mining (e.g. `mining: { auto: true,
 interval: 5000 }`) so the signing gate always sees fresh blocks without needing
 a transaction. A well-known Hardhat account key is acceptable locally; Sepolia

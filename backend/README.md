@@ -14,6 +14,8 @@ npm run dev            # build + boot on http://localhost:4000/api
 
 The server boots with sensible local-dev defaults; only `JWT_SECRET` is mandatory (the server refuses to start without it). Requires Node.js ≥ 22: the `npm test` glob is expanded by Node's own test runner, so the command works unchanged in any shell. Other scripts: `npm run build` (tsc), `npm test` (build + `node --test`), `npm start`, `npm run backfill` (see below).
 
+Operator guide (startup order, Sepolia values, health checks, troubleshooting): [`docs/runbook.md`](../docs/runbook.md).
+
 ## Upgrading an existing deployment: one-time backfill
 
 Session discovery scans forward from a persisted block watermark, so an existing database never re-reads history. When a deploy adds discovery of a new event type (e.g. `SessionJoined` for duel mirror positions), joins that happened before the upgrade stay undiscovered. Run a one-time backfill over the missed window — inserts are idempotent and the watermark never moves, so all business data (profiles, check-ins, media) is preserved:
