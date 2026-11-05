@@ -396,11 +396,78 @@ Soulbound ERC721 minted on session success (requirements baseline v1.4 section
 
 ## Deployment (Sepolia)
 
-Set `PRIVATE_KEY` / `RPC_URL` / `ETHERSCAN_API_KEY` in `.env`, then:
+One command deploys both contracts and verifies their source on Etherscan.
+You need: a Sepolia RPC endpoint (Alchemy / Infura), a deployer wallet funded
+with Sepolia ETH (from a faucet, e.g. https://sepoliafaucet.com or
+https://cloud.google.com/application/web3/faucet/ethereum/sepolia), and a free
+Etherscan API key (https://etherscan.io/apis).
+
+Copy the template and fill in every value:
+
+```bash
+cp .env.example .env
+```
+
+| Variable | What to put |
+| --- | --- |
+| `DEPLOYER_PRIVATE_KEY` | `0x`-prefixed key of the deployer wallet (pays gas, becomes the contract owner). Use a throwaway testnet key — never a key that guards real funds. |
+| `SEPOLIA_RPC_URL` | HTTPS RPC endpoint for Sepolia (chain 11155111). |
+| `ETHERSCAN_API_KEY` | Etherscan API key. When set, the deploy script verifies both contracts right after deployment. |
+| `ATTESTER_ADDRESS` | Address derived from the proof service's `ATTESTER_PRIVATE_KEY` (`attester/.env`, see the attester runbook). The contract accepts EIP-712 completion attestations from this address only. |
+| `CHARITY_ADDRESS` | Forfeit sink for failed / disputed stakes (withdraw-only). Disclosure (contract-design v4.1 §1): a team-controlled Sepolia address standing in for a real charity — not a real donation. |
+
+Then, from the repo root:
 
 ```bash
 npx hardhat run scripts/deploy.js --network sepolia
-npx hardhat verify --network sepolia <BEAST_NFT_ADDRESS> <OWNER> 0x0000000000000000000000000000000000000000
 ```
 
-(Etherscan verification runbook lands with WP7.)
+Expected output (addresses differ per deployment):
+
+```
+Network:  sepolia (chainId 11155111)
+Owner:    0x…
+Attester: 0x…
+Charity:  0x…
+BeastNFT deployed:   0x…
+StakeBeast deployed: 0x…
+BeastNFT minter -> StakeBeast
+Wrote …/deployments/sepolia.json
+
+Attester .env (fill in the signing key for the attester account):
+RPC_URL=<your Sepolia RPC URL>
+CONTRACT_ADDRESS=0x…
+ATTESTER_PRIVATE_KEY=<key of 0x…>
+
+Verifying sources on Etherscan (best-effort)...
+BeastNFT: verified on Etherscan
+StakeBeast: verified on Etherscan
+
+Verify commands (copy-paste):
+  npx hardhat verify --network sepolia <BEAST_NFT> <OWNER> <OWNER>
+  npx hardhat verify --network sepolia <STAKEBEAST> <OWNER> <ATTESTER> <CHARITY> <BEAST_NFT> 3600 3600 3600
+```
+
+The script writes `deployments/sepolia.json` recording both contract
+addresses, the deploy transaction hashes and block numbers, the exact
+constructor arguments, and the deployment timestamp. Hand the addresses to
+the frontend (`VITE_CONTRACT_ADDRESS` = `stakeBeast`,
+`VITE_NFT_CONTRACT_ADDRESS` = `beastNFT`) and point both services'
+`CONTRACT_ADDRESS` at `stakeBeast`.
+
+If verification was skipped (no `ETHERSCAN_API_KEY`) or failed transiently —
+Etherscan can take a minute to index a fresh contract — re-run it any time;
+it reads the recorded constructor arguments back from the deployment file:
+
+```bash
+npx hardhat run scripts/verify.js --network sepolia
+```
+
+Notes:
+
+- Constructor profile: `JOIN_WINDOW = START_WINDOW = GRACE_DURATION = 3600`
+  seconds (demo profile, same as the unit tests; contract-design v4.1 §1 sets
+  a 24 h production profile and allows shorter values for demos).
+- The attester address must stay in sync with the running proof service: if
+  `ATTESTER_PRIVATE_KEY` is rotated, call `setAttester` from the owner wallet
+  (or redeploy) — old-key signatures stop settling from that moment (R2).
