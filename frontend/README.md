@@ -12,14 +12,18 @@ pull-payment withdraw entry.
 
 ## Requirements
 
-- Node.js ≥ 20 (developed on 22)
+- Node.js ≥ 20.12 (developed on 22)
 - MetaMask (desktop extension or the MetaMask mobile in-app browser)
 
 ## Quick start
 
+The frontend starts **last** — after the chain is deployed and the two
+services are running (startup order: chain → attester → backend → frontend;
+see the repository README for the full walkthrough).
+
 ```bash
-cp .env.example .env   # fill in values when contracts/services are deployed
 npm install
+cp .env.example .env   # then fill in the values (see below)
 npm run dev            # http://localhost:5173
 ```
 
@@ -30,17 +34,38 @@ Other scripts: `npm run build` (type-check + production build),
 
 All deployment-specific values are injected through `.env` with the `VITE_`
 prefix — the repository carries **zero hardcoded addresses**. See
-`.env.example` for the full list:
+`.env.example` for the annotated template:
 
-| Variable | Purpose |
-| --- | --- |
-| `VITE_CONTRACT_ADDRESS` | StakeBeast session contract (after WP1 deploy) |
-| `VITE_NFT_CONTRACT_ADDRESS` | BeastNFT contract (after WP2 deploy) |
-| `VITE_PROOF_SERVICE_URL` | Machine-attestation service (WP3) — focus tracking (bind/arm/heartbeat) and the settle attestation fetch |
-| `VITE_API_BASE_URL` | Social backend REST API (P1, WP4) |
-| `VITE_SEPOLIA_RPC_URL` | Optional RPC used when adding Sepolia to a wallet |
-| `VITE_CHAIN_ID` | Expected chain override; empty = Sepolia. Set `31337` for a local Hardhat node |
-| `VITE_DEMO_MODE` | `true` enables the zoo sample shelf in built bundles (dev server always counts as demo mode) |
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `VITE_CONTRACT_ADDRESS` | Yes | StakeBeast session contract — `stakeBeast` in `deployments/<network>.json` |
+| `VITE_NFT_CONTRACT_ADDRESS` | Yes | BeastNFT contract — `beastNFT` in `deployments/<network>.json` |
+| `VITE_PROOF_SERVICE_URL` | For machine-proof focus sessions | Machine-attestation service — focus tracking (bind/arm/heartbeat) and the settle attestation fetch |
+| `VITE_API_BASE_URL` | For social features (P1) | Social backend REST API, including the `/api` suffix |
+| `VITE_SEPOLIA_RPC_URL` | No | RPC endpoint used when adding Sepolia to a wallet |
+| `VITE_CHAIN_ID` | No | Expected chain override; empty = Sepolia. Set `31337` for a local Hardhat node |
+| `VITE_DEMO_MODE` | No | `true` enables the zoo sample shelf in built bundles (dev server always counts as demo mode) |
+
+The app boots with empty values, but the matching feature stays disabled:
+create/focus/settle need the contract addresses, machine-proof sessions need
+the proof service, and social features need the backend.
+
+## Pointing at Sepolia
+
+Once the contracts are deployed to Sepolia (WP7, `deployments/sepolia.json`):
+
+1. Copy `stakeBeast` → `VITE_CONTRACT_ADDRESS` and `beastNFT` →
+   `VITE_NFT_CONTRACT_ADDRESS` in `frontend/.env`.
+2. Leave `VITE_CHAIN_ID` empty — Sepolia (11155111) is the default expected
+   network, so MetaMask is auto-switched on connect and any other network
+   gets the wrong-network screen with a one-click switch.
+3. Set `VITE_PROOF_SERVICE_URL` / `VITE_API_BASE_URL` to the deployed
+   service URLs (or the local ones while running the services on your own
+   machine).
+
+> **Status:** the Sepolia addresses land with the M4-A deployment (DAPP-62);
+> until then this section is the mechanism and `deployments/sepolia.json`
+> does not exist yet.
 
 ## Wallet flow
 

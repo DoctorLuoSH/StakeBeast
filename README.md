@@ -27,25 +27,24 @@ the process running.
 
 ### What you can experience today
 
-*Snapshot of `main` as of 2026-10-31. This table must be updated when the M3
-frontend integration (DAPP-34/35/36) lands.*
+- The **frontend is fully wired**: four-mode session creation, explicit
+  start, the focus countdown with machine attestation, settlement, the
+  withdraw entry, and the My Zoo homepage all talk to the real contracts —
+  on Sepolia, or on a local Hardhat node with `VITE_CHAIN_ID=31337`.
+- **Mutual Bet and Co-Focus Duo run end to end in the UI** — join /
+  admit-defeat / cross-confirm, co-focus handshake + joint forfeit — on top
+  of their contract unit tests.
+- **Solo Focus also runs as a script needing neither MetaMask nor real ETH**:
+  the same wire protocol the UI uses (same contract calls, same
+  bind/heartbeat/attestation API) against a local chain with built-in dev
+  accounts. Every step is real and observable; only the browser click-path is
+  substituted.
 
-- The **frontend is a demo build**: every page renders and MetaMask connects,
-  but the browser does not send contract transactions yet.
-- **Mutual Bet and Co-Focus Duo already have contract implementations and unit
-  tests** — but no web two-player experience yet; today you meet them through
-  the test suite, not the UI.
-- **Solo Focus needs neither MetaMask nor real ETH**: its loop runs as a script
-  against a local chain with built-in dev accounts, using exactly the wire
-  protocol the UI will use (same contract calls, same
-  bind/heartbeat/attestation API). Every step is real and observable; only the
-  browser click-path is substituted.
-
-| | Web pages (demo UI) | Contract tests | Solo Focus e2e script |
+| | Web UI | Contract tests | Solo Focus e2e script |
 | --- | --- | --- | --- |
-| What you get | Full UI walk-through on sample data — Create / Focus / Settlement / My Zoo | 135 automated checks of every contract rule, including Mutual Bet and Co-Focus Duo | A real 2-minute stake-to-mint loop on your own local chain, ending `21/21 checks passed` |
-| Real chain transactions? | Not yet — arrives with M3 (DAPP-34/35/36) | Yes, on an in-process test chain | Yes, on your local chain |
-| MetaMask / real ETH needed? | MetaMask optional (wallet gate is Sepolia-only for now); never real ETH | Neither | Neither — Hardhat dev accounts |
+| What you get | The full product on your own chain or Sepolia — Create / Focus / Settlement / My Zoo, incl. Mutual Bet and Co-Focus Duo | 135 automated checks of every contract rule, including Mutual Bet and Co-Focus Duo | A real 2-minute stake-to-mint loop on your own local chain, ending `21/21 checks passed` |
+| Real chain transactions? | Yes | Yes, on an in-process test chain | Yes, on your local chain |
+| MetaMask / real ETH needed? | MetaMask required; test ETH only (Sepolia faucet or Hardhat dev accounts) | Neither | Neither — Hardhat dev accounts |
 | How | Step 7 | `npx hardhat test` | Step 6 |
 
 ### Prerequisites
@@ -170,8 +169,8 @@ local run comes from Terminal 1 — see step 4.
 > Where: repo root · editing only, no new process.
 
 Only two files need real values for a local run, and every value comes from
-steps 2–3. (Root `.env` is Sepolia-only — skip it. `frontend/.env` is
-optional — see step 7.)
+steps 2–3. (Root `.env` is Sepolia-only — skip it. `frontend/.env` comes in
+step 7.)
 
 Create the files from the shipped templates:
 
@@ -296,8 +295,8 @@ and the backend returns `{"ok":true}`.
 npx hardhat run scripts/e2e-solo-success.js --network localhost
 ```
 
-The script is a scripted client doing exactly what the browser will do after
-M3 — a 2-minute solo focus session, start to finish. Expected: every line
+The script is a scripted client doing exactly what the browser does in
+step 7 — a 2-minute solo focus session, start to finish. Expected: every line
 prints `PASS` and the run ends `==== 21/21 checks passed ====` (about
 3 minutes, most of it the real 2-minute monitored window):
 
@@ -314,9 +313,8 @@ prints `PASS` and the run ends `==== 21/21 checks passed ====` (about
 The mint is confirmed **in the script logs**: `E2E-15`/`E2E-16` print the
 `SessionCompleted` event and the NFT's on-chain metadata (owner = the staker,
 kind = Focus, metricValue = 2 minutes, tier = Sprout, sessionId = 1), and
-`E2E-18` shows the stake returning to the wallet. The **My Zoo page does not
-show this beast** — on current `main` the UI renders a demo sample shelf;
-showing real mints arrives with the M3 contract reads.
+`E2E-18` shows the stake returning to the wallet. Point the frontend at this
+deployment (step 7) and the same beast appears on the **My Zoo** page.
 
 Fresh-chain rule: every scripted run asserts exact token ids and clean
 windows (`solo-success` expects the freshly minted token #1, the failure-path
@@ -328,24 +326,47 @@ deterministic chain, but everything recorded on the old chain is gone — fill
 `.env` from the new deploy output (step 4) rather than assuming the old values
 still match.
 
-### Step 7 — Look at the demo UI
+### Step 7 — Run the web UI
 
 > Where: Terminal 5, repo root · stays running while you explore.
+
+The frontend starts **last** — it needs the chain (Terminal 1) and the two
+services (Terminals 3–4) running. Point it at your local deployment first:
+copy the template, then fill in five values.
+
+```bash
+# Git Bash
+cp frontend/.env.example frontend/.env
+```
+
+```powershell
+# PowerShell
+Copy-Item frontend\.env.example frontend\.env
+```
+
+- `VITE_CONTRACT_ADDRESS` — the `StakeBeast deployed:` address from step 3
+  (`stakeBeast` in `deployments/localhost.json`)
+- `VITE_NFT_CONTRACT_ADDRESS` — the `BeastNFT deployed:` address (`beastNFT`)
+- `VITE_PROOF_SERVICE_URL=http://localhost:3001`
+- `VITE_API_BASE_URL=http://localhost:4000/api`
+- `VITE_CHAIN_ID=31337` — expected-network override for the local chain
+
+Then start the dev server:
 
 ```bash
 npm --prefix frontend run dev
 ```
 
-Expected output: Vite's `Local: http://localhost:5173/`. Today's behaviour:
-the UI renders and MetaMask connects, but the wallet gate requires
-**Sepolia** — a wallet pointed at the local chain gets the wrong-network
-screen, and session pages run as labelled demos until M3 wiring lands.
+Expected output: Vite's `Local: http://localhost:5173/`. Connect MetaMask and
+the app auto-switches the wallet onto the expected network (your local chain
+here; Sepolia when `VITE_CHAIN_ID` is empty) — any other network gets a
+wrong-network screen with a one-click switch. To sign on the local chain,
+import one of Hardhat's dev accounts from Terminal 1 into MetaMask.
 
-Optional, saves a restart once M3 wiring lands: copy `frontend/.env.example`
-to `frontend/.env` and fill `VITE_CONTRACT_ADDRESS` /
-`VITE_NFT_CONTRACT_ADDRESS` / `VITE_PROOF_SERVICE_URL=http://localhost:3001` /
-`VITE_API_BASE_URL=http://localhost:4000/api`. The skeleton UI boots with
-empty values, so this can wait.
+Vite reads `.env` only at startup — restart the dev server after editing it.
+For Sepolia, leave `VITE_CHAIN_ID` empty and take the addresses from
+`deployments/sepolia.json` instead; see `frontend/README.md` → "Pointing at
+Sepolia".
 
 ### Run the tests
 
@@ -354,7 +375,7 @@ empty values, so this can wait.
 | Contracts | `npx hardhat test` | 135 passing |
 | Proof service | `npm --prefix attester test` | 35 passing |
 | Social backend | `npm --prefix backend test` | 48 passing |
-| Frontend | `npm --prefix frontend test` | 9 passing |
+| Frontend | `npm --prefix frontend test` | 204 passing |
 
 Frontend extras: `npm --prefix frontend run build` (type-check + production
 bundle) and `npm --prefix frontend run lint` (0 problems) should both pass.
@@ -373,7 +394,7 @@ bundle) and `npm --prefix frontend run lint` (0 problems) should both pass.
 | Things silently break after a restart; `curl :8545` answers but accounts/sessions look stale | A previous `hardhat node` survived as an orphan holding port 8545. Find the listener (`netstat -ano \| findstr :8545` on Windows, `lsof -i :8545` on macOS/Linux), kill that exact PID, then restart the node **and redeploy** — a restart wipes the chain's state, so re-check every address against the new deploy output (addresses usually come back identical, but the old state is gone). |
 | Backend exits at boot mentioning `JWT_SECRET` | `backend/.env` missing or the variable unset — the shipped dev placeholder covers local runs. |
 | `npm --prefix backend test` fails to find tests on older Node | The suite relies on Node ≥ 22 expanding the `--test` glob; upgrade Node (this also fixes the same class of issue in the attester suite). |
-| MetaMask shows the wrong-network screen on `localhost:5173` | Expected on current `main`: the UI skeleton accepts **Sepolia only**. Local-chain support arrives with the M3 integration. |
+| MetaMask shows the wrong-network screen on `localhost:5173` | The wallet is not on the network the frontend expects. Local runs need `VITE_CHAIN_ID=31337` in `frontend/.env` (restart the dev server after editing); without it the app expects **Sepolia**. Either way, use the screen's one-click switch. |
 | Any e2e script misbehaves or fails on a re-run (e.g. wrong token id, `OutsideSettlementWindow`) | Every scripted run expects a fresh chain — `solo-success` asserts the freshly minted token #1, `e2e-failure-paths.js` fast-forwards time, `e2e-mobile-wallet.js` expects a zeroed contract. Restart the node, redeploy, rerun. |
 | Windows: `HARDHAT_MINING_INTERVAL=5000 npx hardhat node` fails in PowerShell | PowerShell has no inline env prefix — use `$env:HARDHAT_MINING_INTERVAL=5000; npx hardhat node`, or use Git Bash. |
 
