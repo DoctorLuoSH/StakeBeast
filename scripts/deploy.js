@@ -33,6 +33,7 @@ async function main() {
   const nft = await BeastNFT.deploy(owner.address, owner.address);
   await nft.waitForDeployment();
   const nftAddress = await nft.getAddress();
+  const nftReceipt = await nft.deploymentTransaction().wait();
   console.log(`BeastNFT deployed:   ${nftAddress}`);
 
   const StakeBeast = await ethers.getContractFactory("StakeBeast");
@@ -47,6 +48,7 @@ async function main() {
   );
   await stake.waitForDeployment();
   const stakeAddress = await stake.getAddress();
+  const stakeReceipt = await stake.deploymentTransaction().wait();
   console.log(`StakeBeast deployed: ${stakeAddress}`);
 
   await (await nft.connect(owner).setMinter(stakeAddress)).wait();
@@ -70,6 +72,18 @@ async function main() {
     startWindow: START_WINDOW,
     graceDuration: GRACE_DURATION,
     deployedAt: new Date().toISOString(),
+    contracts: {
+      BeastNFT: {
+        address: nftAddress,
+        creationTxHash: nftReceipt.hash,
+        deployBlockNumber: nftReceipt.blockNumber,
+      },
+      StakeBeast: {
+        address: stakeAddress,
+        creationTxHash: stakeReceipt.hash,
+        deployBlockNumber: stakeReceipt.blockNumber,
+      },
+    },
   };
   const dir = path.join(__dirname, "..", "deployments");
   fs.mkdirSync(dir, { recursive: true });
