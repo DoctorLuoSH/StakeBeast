@@ -16,6 +16,11 @@ export interface ChainConfig {
   name: string;
   /** Block explorer base URL; empty when the chain has none (local dev). */
   explorer: string;
+  /**
+   * Block the contracts were deployed at — the lower bound for chunked
+   * event-history queries (DAPP-71). 0 on local chains (scan from genesis).
+   */
+  deployBlock: number;
   /** Parameters for `wallet_addEthereumChain` when the wallet lacks the chain. */
   addChainParams: {
     chainId: string;
@@ -40,11 +45,15 @@ export const SEPOLIA_ADD_CHAIN_PARAMS = {
   blockExplorerUrls: [SEPOLIA_EXPLORER],
 } as const;
 
+/** Sepolia deployment block (deployments/sepolia.json `deployBlockNumber`). */
+export const SEPOLIA_DEPLOY_BLOCK = 12075338;
+
 export const SEPOLIA_CHAIN: ChainConfig = {
   chainId: SEPOLIA_CHAIN_ID,
   chainIdHex: SEPOLIA_CHAIN_ID_HEX,
   name: SEPOLIA_NAME,
   explorer: SEPOLIA_EXPLORER,
+  deployBlock: SEPOLIA_DEPLOY_BLOCK,
   addChainParams: SEPOLIA_ADD_CHAIN_PARAMS,
 };
 
@@ -55,6 +64,7 @@ export const HARDHAT_CHAIN: ChainConfig = {
   chainIdHex: "0x7a69",
   name: "Local Hardhat",
   explorer: "",
+  deployBlock: 0,
   addChainParams: {
     chainId: "0x7a69",
     chainName: "Local Hardhat",

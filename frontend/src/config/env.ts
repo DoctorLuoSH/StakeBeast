@@ -41,3 +41,9 @@ export const sepoliaRpcUrl = readEnv("VITE_SEPOLIA_RPC_URL");
  * Sepolia (default); set to 31337 for a local Hardhat node (see README).
  */
 export const chainIdOverride = readEnv("VITE_CHAIN_ID");
+
+/**
+ * Optional event-history start-block override (DAPP-71). Empty = the expected
+ * chain's recorded deployment block (see `deployBlock` in config/chains.ts).
+ */
+export const deployBlockOverride = readEnv("VITE_DEPLOY_BLOCK");
