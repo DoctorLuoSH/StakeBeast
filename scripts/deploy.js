@@ -52,11 +52,17 @@ async function main() {
   await (await nft.connect(owner).setMinter(stakeAddress)).wait();
   console.log("BeastNFT minter -> StakeBeast");
 
+  // BeastNFT deploys first, so its block is the lower bound for chunked
+  // event-history queries over either contract (frontend logQuery, DAPP-71).
+  const deployTx = nft.deploymentTransaction();
+  const deployBlockNumber = deployTx ? ((await deployTx.wait())?.blockNumber ?? 0) : 0;
+
   const info = {
     network: network.name,
     chainId: Number((await ethers.provider.getNetwork()).chainId),
     stakeBeast: stakeAddress,
     beastNFT: nftAddress,
+    deployBlockNumber,
     owner: owner.address,
     attester: attester,
     charity: charity,

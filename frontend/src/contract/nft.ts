@@ -10,6 +10,7 @@
 import { Contract, Interface } from "ethers";
 import type { BrowserProvider } from "ethers";
 import { nftContractAddress } from "../config/env";
+import { queryFilterChunked } from "./logQuery";
 import { Kind, Tier } from "./types";
 import type { BeastStage, BeastTier } from "../components/beast/BeastSprite";
 import type { BeastEntry } from "../components/beast/zooView";
@@ -55,7 +56,11 @@ export function getBeastNft(provider: BrowserProvider): BeastNftApi {
     address: nftContractAddress,
 
     async listMintedTo(account) {
-      const logs = await contract.queryFilter(contract.filters.BeastMinted(null, account, null));
+      const logs = await queryFilterChunked(
+        provider,
+        contract,
+        contract.filters.BeastMinted(null, account, null),
+      );
       const beasts: MintedBeast[] = [];
       for (const log of logs) {
         const decoded = iface.parseLog({ topics: [...log.topics], data: log.data });

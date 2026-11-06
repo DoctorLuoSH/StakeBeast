@@ -12,6 +12,7 @@ import type {
 } from "ethers";
 import { contractAddress } from "../config/env";
 import { STAKEBEAST_ABI } from "./abi";
+import { queryFilterChunked } from "./logQuery";
 import { parseSession } from "./types";
 import type { Payee, Session } from "./types";
 
@@ -198,7 +199,11 @@ export function getStakeBeast(provider: BrowserProvider): StakeBeastApi {
     },
 
     async getForfeitReason(sessionId) {
-      const logs = await contract.queryFilter(contract.filters.SessionForfeited(sessionId));
+      const logs = await queryFilterChunked(
+        provider,
+        contract,
+        contract.filters.SessionForfeited(sessionId),
+      );
       if (logs.length === 0) return null;
       const last = logs[logs.length - 1];
       const decoded = stakeBeastInterface.parseLog({ topics: [...last.topics], data: last.data });
@@ -206,7 +211,11 @@ export function getStakeBeast(provider: BrowserProvider): StakeBeastApi {
     },
 
     async listCheckedIn(sessionId) {
-      const logs = await contract.queryFilter(contract.filters.CheckedIn(sessionId));
+      const logs = await queryFilterChunked(
+        provider,
+        contract,
+        contract.filters.CheckedIn(sessionId),
+      );
       const records: CheckedInRecord[] = [];
       for (const log of logs) {
         const decoded = stakeBeastInterface.parseLog({
@@ -226,7 +235,11 @@ export function getStakeBeast(provider: BrowserProvider): StakeBeastApi {
     },
 
     async getCompletedTokenIds(sessionId) {
-      const logs = await contract.queryFilter(contract.filters.SessionCompleted(sessionId));
+      const logs = await queryFilterChunked(
+        provider,
+        contract,
+        contract.filters.SessionCompleted(sessionId),
+      );
       if (logs.length === 0) return [];
       const decoded = stakeBeastInterface.parseLog({
         topics: [...logs[0].topics],

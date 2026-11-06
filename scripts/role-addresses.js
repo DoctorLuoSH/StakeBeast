@@ -11,8 +11,10 @@ function readAddressEnv(name, purpose) {
   const raw = (process.env[name] || "").trim();
   if (!raw) return null;
   if (!ethers.isAddress(raw) || raw === ethers.ZeroAddress) {
+    // DAPP-70: echo only a prefix of the rejected value, never the full string.
+    const shown = raw.length > 10 ? `${raw.slice(0, 10)}…` : raw;
     throw new Error(
-      `${name} is set to "${raw}", which is not a valid non-zero Ethereum address.\n` +
+      `${name} is set to "${shown}", which is not a valid non-zero Ethereum address.\n` +
         `Fix ${name} in .env — it must be the ${purpose} address written into the contract at deploy time (see .env.example).`
     );
   }
