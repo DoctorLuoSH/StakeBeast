@@ -396,7 +396,16 @@ Soulbound ERC721 minted on session success (requirements baseline v1.4 section
 
 ## Deployment (Sepolia)
 
-Set `PRIVATE_KEY` / `RPC_URL` / `ETHERSCAN_API_KEY` in `.env`, then:
+Set `PRIVATE_KEY` / `RPC_URL` / `ETHERSCAN_API_KEY` in `.env` (see
+`.env.example`), plus the two role addresses written into the contract at
+deploy time — Sepolia configures only the deployer key:
+
+- `ATTESTER_ADDRESS` — address of the attestation service signer. Its signing
+  key stays in `attester/.env` as `ATTESTER_PRIVATE_KEY` (different file,
+  different purpose); the deployer only needs the address.
+- `CHARITY_ADDRESS` — forfeited-stake charity recipient.
+
+Then:
 
 ```bash
 npx hardhat run scripts/deploy.js --network sepolia

@@ -12,6 +12,7 @@
 const { ethers, network } = require("hardhat");
 const fs = require("fs");
 const path = require("path");
+const { resolveRoleAddresses } = require("./role-addresses");
 
 // Demo-profile windows in seconds (same profile as the unit-test fixture).
 const JOIN_WINDOW = 3600;
@@ -19,11 +20,14 @@ const START_WINDOW = 3600;
 const GRACE_DURATION = 3600;
 
 async function main() {
-  const [owner, attester, charity] = await ethers.getSigners();
+  // Only the deployer key is configured per network; the attester / charity
+  // role addresses come from ATTESTER_ADDRESS / CHARITY_ADDRESS (Sepolia) or
+  // fall back to the local dev signers (hardhat / localhost).
+  const { owner, attester, charity } = await resolveRoleAddresses();
   console.log(`Network:  ${network.name} (chainId ${(await ethers.provider.getNetwork()).chainId})`);
   console.log(`Owner:    ${owner.address}`);
-  console.log(`Attester: ${attester.address}`);
-  console.log(`Charity:  ${charity.address}`);
+  console.log(`Attester: ${attester}`);
+  console.log(`Charity:  ${charity}`);
 
   const BeastNFT = await ethers.getContractFactory("BeastNFT");
   const nft = await BeastNFT.deploy(owner.address, owner.address);
@@ -34,8 +38,8 @@ async function main() {
   const StakeBeast = await ethers.getContractFactory("StakeBeast");
   const stake = await StakeBeast.deploy(
     owner.address,
-    attester.address,
-    charity.address,
+    attester,
+    charity,
     nftAddress,
     JOIN_WINDOW,
     START_WINDOW,
@@ -54,8 +58,8 @@ async function main() {
     stakeBeast: stakeAddress,
     beastNFT: nftAddress,
     owner: owner.address,
-    attester: attester.address,
-    charity: charity.address,
+    attester: attester,
+    charity: charity,
     joinWindow: JOIN_WINDOW,
     startWindow: START_WINDOW,
     graceDuration: GRACE_DURATION,
@@ -70,7 +74,7 @@ async function main() {
   console.log("\nAttester .env (fill in the signing key for the attester account):");
   console.log(`RPC_URL=http://127.0.0.1:8545`);
   console.log(`CONTRACT_ADDRESS=${stakeAddress}`);
-  console.log(`ATTESTER_PRIVATE_KEY=<key of ${attester.address}>`);
+  console.log(`ATTESTER_PRIVATE_KEY=<key of ${attester}>`);
 }
 
 main().catch((error) => {
