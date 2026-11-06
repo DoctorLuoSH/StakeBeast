@@ -413,3 +413,27 @@ npx hardhat verify --network sepolia <BEAST_NFT_ADDRESS> <OWNER> 0x0000000000000
 ```
 
 (Etherscan verification runbook lands with WP7.)
+
+### Live deployment (2026-11-06)
+
+Both contracts are deployed on Sepolia (chainId 11155111) and source-verified
+on Etherscan. The full machine-readable record is `deployments/sepolia.json`.
+
+| Contract | Address | Creation tx | Deploy block |
+| --- | --- | --- | --- |
+| StakeBeast | [`0x6eBda20cC9c6AFA96dF27C7D5F2E663D443Af9b5`](https://sepolia.etherscan.io/address/0x6eBda20cC9c6AFA96dF27C7D5F2E663D443Af9b5) | [`0x8b0d7174…31cdf1a8`](https://sepolia.etherscan.io/tx/0x8b0d71748242af6d8c4c11df7b26abb0b3f1e5a708b03483d465dc2931cdf1a8) | 12075339 |
+| BeastNFT | [`0x4EB249d063190B481bEEF2ebE6d894FD7e95274a`](https://sepolia.etherscan.io/address/0x4EB249d063190B481bEEF2ebE6d894FD7e95274a) | [`0xd694c07b…892671a`](https://sepolia.etherscan.io/tx/0xd694c07b6f7aecbd68a9f4b20aa64aa82711eec373d43b68a92346ac1892671a) | 12075338 |
+
+Deployer / owner: `0x4D986914C39a07e292E3A9194346be75Fb6C4E4D` · attester:
+`0x5E09aC06288Be6F215fc991745F7e46F76bCEAe4` · charity:
+`0x44A2F4ee5cA53727407D9BD037518af49Ff34c54` · windows: join / start / grace
+= 3600 s each.
+
+Re-check the live deployment against this repo at any time (13 checks:
+on-chain bytecode vs the local build with immutable slots masked, constructor
+args decoded from the creation transactions, wiring reads, and a
+`SessionCreated` smoke scan):
+
+```bash
+npx hardhat run scripts/verify-deployment.js --network sepolia
+```

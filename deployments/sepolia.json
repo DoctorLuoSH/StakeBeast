@@ -1,0 +1,25 @@
+{
+  "network": "sepolia",
+  "chainId": 11155111,
+  "stakeBeast": "0x6eBda20cC9c6AFA96dF27C7D5F2E663D443Af9b5",
+  "beastNFT": "0x4EB249d063190B481bEEF2ebE6d894FD7e95274a",
+  "owner": "0x4D986914C39a07e292E3A9194346be75Fb6C4E4D",
+  "attester": "0x5E09aC06288Be6F215fc991745F7e46F76bCEAe4",
+  "charity": "0x44A2F4ee5cA53727407D9BD037518af49Ff34c54",
+  "joinWindow": 3600,
+  "startWindow": 3600,
+  "graceDuration": 3600,
+  "deployedAt": "2026-11-06T08:19:14.725Z",
+  "contracts": {
+    "BeastNFT": {
+      "address": "0x4EB249d063190B481bEEF2ebE6d894FD7e95274a",
+      "creationTxHash": "0xd694c07b6f7aecbd68a9f4b20aa64aa82711eec373d43b68a92346ac1892671a",
+      "deployBlockNumber": 12075338
+    },
+    "StakeBeast": {
+      "address": "0x6eBda20cC9c6AFA96dF27C7D5F2E663D443Af9b5",
+      "creationTxHash": "0x8b0d71748242af6d8c4c11df7b26abb0b3f1e5a708b03483d465dc2931cdf1a8",
+      "deployBlockNumber": 12075339
+    }
+  }
+}
